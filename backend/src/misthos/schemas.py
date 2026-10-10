@@ -10,9 +10,10 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from misthos.domain.money import Usdc
+from misthos.domain.repo import parse_repo_link
 
 Tier = Literal["open", "team", "enterprise"]
 Actor = Literal["agent", "publisher", "contributor", "system"]
@@ -353,7 +354,8 @@ class TimelineEntry(BaseModel):
 
 
 class PublishRequest(BaseModel):
-    repo: str = Field(examples=["acme/ledger"])
+    repo: str = Field(examples=["acme/ledger", "https://github.com/acme/ledger/issues/12"])
+    """`owner/name`, or a link to the repository or the issue, which is read for both."""
     number: int | None = None
     title: str
     summary: str = ""
@@ -361,6 +363,26 @@ class PublishRequest(BaseModel):
     publisher_id: str
     compliance_driven: bool = False
     signals: dict[str, float] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _name_the_repository(self) -> PublishRequest:
+        """Read a pasted GitHub link as the `owner/name` the rest of the app matches.
+
+        Connections, webhooks and the loop all compare the `owner/name` GitHub
+        reports, so a link has to arrive as that or nothing would ever match it. A
+        link also carries the issue number, which stands in when none was typed.
+
+        Anything that is not a link is left exactly as the publisher wrote it. The
+        repository is their own words, and the CSV export is what makes those safe to
+        open in a spreadsheet — not this field (see
+        `tests/integration/test_compliance_at_payout.py`).
+        """
+        repo, number = parse_repo_link(self.repo)
+        if repo:
+            self.repo = repo
+            if self.number is None and number is not None:
+                self.number = number
+        return self
 
 
 Role = Literal["publisher", "contributor"]

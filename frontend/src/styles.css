@@ -247,6 +247,15 @@ button {
   color: var(--g500);
 }
 
+/* What the Repository field understood from what was typed or pasted. */
+.field-note {
+  color: var(--g500);
+}
+
+.field-note.bad {
+  color: var(--bad);
+}
+
 .dim {
   color: var(--g300);
 }

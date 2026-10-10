@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
 import { ApiError, api, unwrap } from '../lib/client'
+import { parseRepoLink } from '../lib/repo-link'
 import { useHealth, useMe } from '../lib/session'
 import { Panel } from '../components/ui'
 
@@ -23,6 +24,12 @@ export default function Publish() {
   const [labels, setLabels] = useState('')
   const [compliance, setCompliance] = useState(false)
 
+  // What the publisher typed or pasted, read once: the request carries the
+  // `owner/name` the API stores, and the field can say what it understood first.
+  const link = parseRepoLink(repo)
+  // A pasted issue link carries its number, so it stands in when the field is empty.
+  const issueNumber = number.trim() || link.number || ''
+
   const account = me.data?.account ?? null
   const ready = account?.role === 'publisher' && Boolean(account.github_login)
   // Set the moment the form is sent. The button is disabled by isPending, but that
@@ -35,8 +42,8 @@ export default function Publish() {
       unwrap(
         await api.POST('/api/v1/issues', {
           body: {
-            repo: repo.trim(),
-            number: number ? Number(number) : null,
+            repo: link.repo,
+            number: issueNumber ? Number(issueNumber) : null,
             title: title.trim(),
             summary: summary.trim(),
             labels: labels
@@ -105,11 +112,24 @@ export default function Publish() {
                   <input
                     className="input"
                     value={repo}
-                    onChange={(e) => setRepo(e.target.value)}
-                    placeholder="owner/name"
-                    pattern="[A-Za-z0-9_.\-]+/[A-Za-z0-9_.\-]+"
+                    onChange={(e) => {
+                      const next = e.target.value
+                      setRepo(next)
+                      // A pasted issue link carries its number. Fill the field in
+                      // rather than make the publisher read it off the URL.
+                      const found = parseRepoLink(next)
+                      if (found.number && !number) setNumber(found.number)
+                    }}
+                    placeholder="owner/name, or paste a GitHub link"
                     required
                   />
+                  {repo.trim() !== '' && (
+                    <span className={link.repo ? 'field-note' : 'field-note bad'}>
+                      {link.repo
+                        ? `Read as ${link.repo}${link.number ? ` issue ${link.number}` : ''}`
+                        : 'That names no GitHub repository'}
+                    </span>
+                  )}
                 </label>
                 <label className="field">
                   <span>Issue number</span>
@@ -164,7 +184,7 @@ export default function Publish() {
                 <button
                   className="btn primary"
                   type="submit"
-                  disabled={publish.isPending || !repo.trim() || !title.trim()}
+                  disabled={publish.isPending || !link.repo || !title.trim()}
                 >
                   {publish.isPending ? 'Pricing…' : 'Publish and get a price'}
                 </button>
