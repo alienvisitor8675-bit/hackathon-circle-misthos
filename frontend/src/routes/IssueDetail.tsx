@@ -73,15 +73,29 @@ export default function IssueDetail() {
               {l}
             </span>
           ))}
-          <a
-            className="chip"
-            href={issue.github_url}
-            target="_blank"
-            rel="noreferrer"
-            style={{ marginLeft: 'auto' }}
-          >
-            Open on GitHub ↗
-          </a>
+          {health.data?.simulated ? (
+            // The simulation keeps its own GitHub: this issue has a repository and a
+            // number but no page, so a link to github.com would answer 404 and read as
+            // a broken app. It is offered once the App is installed and the issue is a
+            // real one — the same rule IssueActions uses for the merge step.
+            <span
+              className="chip"
+              style={{ marginLeft: 'auto' }}
+              title="This issue exists in the simulation only, so GitHub has no page for it"
+            >
+              simulated GitHub
+            </span>
+          ) : (
+            <a
+              className="chip"
+              href={issue.github_url}
+              target="_blank"
+              rel="noreferrer"
+              style={{ marginLeft: 'auto' }}
+            >
+              Open on GitHub ↗
+            </a>
+          )}
         </div>
         <h1 className="detail-title">{issue.title}</h1>
         <p className="detail-summary">{issue.summary}</p>
