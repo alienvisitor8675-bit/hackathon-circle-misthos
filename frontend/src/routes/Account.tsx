@@ -130,9 +130,9 @@ export default function AccountPage() {
               </div>
             </Panel>
 
-            {/* Offered whether or not GitHub is linked yet: installing the App authorizes
-                as it goes and finishes the link, so for a publisher who has not linked it
-                is the whole of what they have to do. */}
+            {/* Rendered for any publisher, but the install link inside waits for a
+                linked login: a connection is attributed to the publisher whose *linked*
+                login installed it, so linking comes first and this panel says so. */}
             {account?.role === 'publisher' && (
               <Repositories publisherId={account.party_id} linked={Boolean(account.github_login)} />
             )}
@@ -195,14 +195,21 @@ function Repositories({ publisherId, linked }: { publisherId: string; linked: bo
         it priced, then comment <code>/misthos approve</code> on it to commit the funds.
         Contributors claim it with <code>/misthos claim</code>.
       </p>
-      {data.install_url && linked && (
-        // Offered here once GitHub is linked, to install on another repository. When it
-        // is not linked the linking panel above carries this call to action, so the page
-        // never shows it twice.
+      {linked && (data.settings_url || data.install_url) && (
+        // Offered here once GitHub is linked, which is the order attribution needs. Once
+        // a repository is connected the App is installed and GitHub's page for that
+        // installation is the only place to add or remove repositories, so that is what
+        // the button becomes rather than offering an install the App is already on.
         <div className="btn-row" style={{ marginTop: 12 }}>
-          <a className="btn" href={data.install_url}>
-            Install the GitHub App on another repository
-          </a>
+          {data.settings_url ? (
+            <a className="btn" href={data.settings_url}>
+              Open {data.app_name ?? 'App'} settings
+            </a>
+          ) : (
+            <a className="btn" href={data.install_url ?? '#'}>
+              Install the GitHub App
+            </a>
+          )}
         </div>
       )}
     </Panel>

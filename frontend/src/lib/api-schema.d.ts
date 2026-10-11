@@ -1827,6 +1827,10 @@ export interface components {
             label: string;
             /** Install Url */
             install_url?: string | null;
+            /** App Name */
+            app_name?: string | null;
+            /** Settings Url */
+            settings_url?: string | null;
         };
         /**
          * ReputationEventOut

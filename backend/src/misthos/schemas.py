@@ -791,3 +791,11 @@ class RepositoriesOut(BaseModel):
     """The label that has an issue priced."""
     install_url: str | None = None
     """Where to install the App on another repository, when its slug is configured."""
+    app_name: str | None = None
+    """The App's name, for labelling the link that manages it."""
+    settings_url: str | None = None
+    """Where to manage the installation that already covers a repository.
+
+    GitHub's per-installation page is the only place a repository is added to or removed
+    from an installation, so once something is connected this is what to offer instead
+    of installing again. None when nothing is connected yet."""

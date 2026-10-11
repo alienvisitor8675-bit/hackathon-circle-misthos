@@ -382,6 +382,27 @@ class TestThePublishersView:
         assert [r["repo"] for r in body["repositories"]] == ["acme/gears", REPO]
         assert body["label"] == "misthos"
         assert body["install_url"] == "https://github.com/apps/misthos-dev/installations/new"
+        assert body["app_name"] == "misthos-dev"
+        # The installation that put those repositories here is the one to manage.
+        assert body["settings_url"] == "https://github.com/settings/installations/42"
+
+    def test_a_connected_repository_offers_its_installation_settings(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Once installed, the button manages the installation rather than installing.
+
+        GitHub's per-installation page is the only place a repository is added to or
+        removed from an installation, so it is what to point at instead of an install
+        page the App is already on.
+        """
+        monkeypatch.setattr(settings, "github_app_slug", "misthos-dev")
+        publisher = onboard(90, "publisher", "acme-maint")
+        installed("acme-maint", [REPO])
+        body = TestClient(app).get(f"{API}/publishers/{publisher}/repositories").json()
+
+        assert [r["repo"] for r in body["repositories"]] == [REPO]
+        assert body["settings_url"] == "https://github.com/settings/installations/42"
+        assert body["app_name"] == "misthos-dev"
 
     def test_an_installation_waits_for_the_wallet_that_claims_it(
         self, monkeypatch: pytest.MonkeyPatch
@@ -410,9 +431,11 @@ class TestThePublishersView:
             f"{API}/auth/role", json={"role": "publisher", "name": "late-maint"}
         ).json()["party_id"]
 
-        # Linked to nothing: the installation is invisible to this publisher.
+        # Linked to nothing: the installation is invisible to this publisher, and so
+        # there is no installation to manage yet.
         before = client.get(f"{API}/publishers/{publisher}/repositories").json()
         assert before["repositories"] == []
+        assert before["settings_url"] is None
 
         client.post(f"{API}/auth/github/simulate", json={"login": "late-maint"})
 

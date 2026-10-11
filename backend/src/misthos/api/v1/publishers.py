@@ -151,10 +151,20 @@ async def repositories(publisher_id: str, account: Account | None = SIGNED_IN) -
     if await run_in_threadpool(store.get_publisher, publisher_id) is None:
         raise HTTPException(status_code=404, detail=f"no publisher {publisher_id}")
     slug = settings.github_app_slug
+    connected = await run_in_threadpool(store.connections_of, publisher_id)
     return RepositoriesOut(
-        repositories=await run_in_threadpool(store.connections_of, publisher_id),
+        repositories=connected,
         label=settings.github_label,
         # Plain: installing connects repositories for label-driven pricing. It does not
         # link anyone, so it carries no state and finishes no link.
         install_url=f"https://github.com/apps/{slug}/installations/new" if slug else None,
+        app_name=slug or None,
+        # Once something is connected, adding or removing repositories happens on GitHub's
+        # own page for that installation -- there is no API for it -- so that is what to
+        # point at rather than an install page the App is already on.
+        settings_url=(
+            f"https://github.com/settings/installations/{connected[0].installation_id}"
+            if connected
+            else None
+        ),
     )
