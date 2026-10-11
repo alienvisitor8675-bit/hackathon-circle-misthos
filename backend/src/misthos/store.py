@@ -1579,19 +1579,32 @@ class Store:
             self._refuse_listed(payload.repo, payload.number)
         started = time.perf_counter()
         facts = None
-        if payload.number and not payload.signals:
+        number = payload.number
+        if number is None and not payload.signals and self.github.creates_issues:
+            # The publisher is describing work GitHub does not hold yet, so the issue
+            # is opened first and the price is put on the issue that now exists. A
+            # number of our own would price something no contributor could open.
             try:
-                facts = self.github.read_issue(payload.repo, payload.number)
+                number = self.github.create_issue(
+                    payload.repo, payload.title, payload.summary, list(payload.labels)
+                )
             except GitHubError as exc:
                 raise UnreadableIssue(
-                    f"could not read {payload.repo}#{payload.number} from GitHub: {exc}"
+                    f"could not open an issue in {payload.repo}: {exc}"
+                ) from exc
+        if number and not payload.signals:
+            try:
+                facts = self.github.read_issue(payload.repo, number)
+            except GitHubError as exc:
+                raise UnreadableIssue(
+                    f"could not read {payload.repo}#{number} from GitHub: {exc}"
                 ) from exc
         ceiling, ceiling_source = self._ceiling(publisher)
         spec = {
             "affordability_ceiling": ceiling,
             "ceiling_source": ceiling_source,
             "repo": payload.repo,
-            "number": payload.number or self._unlisted_number(payload.repo),
+            "number": number or self._unlisted_number(payload.repo),
             "title": payload.title,
             "summary": payload.summary or "Published through the web application.",
             "state": IssueState.PRICED,

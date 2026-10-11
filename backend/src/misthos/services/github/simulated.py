@@ -31,6 +31,9 @@ class Sent:
 
 class SimulatedGitHub:
     name = "simulated"
+    creates_issues = False
+    """The simulation's GitHub holds only what a test or a demo put in it, so there is
+    no repository to open an issue in; the store invents a number as it always has."""
 
     def __init__(self) -> None:
         self._guard = threading.Lock()
@@ -74,6 +77,10 @@ class SimulatedGitHub:
 
     def comment(self, repo: str, number: int, body: str) -> None:
         self._send(Sent("comment", repo, str(number), body))
+
+    def create_issue(self, repo: str, title: str, body: str, labels: list[str]) -> int:
+        """Refused: the simulation has no repository of its own to open one in."""
+        raise GitHubError(f"the simulated GitHub holds no repository {repo} to open an issue in")
 
     def review(self, repo: str, number: int, head_sha: str, event: ReviewEvent, body: str) -> None:
         self._send(Sent("review", repo, str(number), body, state=event.value))

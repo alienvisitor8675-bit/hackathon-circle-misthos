@@ -226,6 +226,33 @@ class TestReadPath:
 
 
 class TestWritePath:
+    def test_a_created_issue_is_posted_as_the_installation_and_keeps_its_number(
+        self, app: GitHubApp, github: FakeGitHub
+    ) -> None:
+        github.on("POST", f"/repos/{REPO}/issues", {"number": 412}, status=201)
+
+        number = app.create_issue(REPO, "Pin the parser", "It accepts anything.", ["bug"])
+
+        sent = json.loads(github.last("POST", f"/repos/{REPO}/issues").content)
+        posted = github.last("POST", f"/repos/{REPO}/issues")
+
+        assert number == 412
+        assert sent == {
+            "title": "Pin the parser",
+            "body": "It accepts anything.",
+            "labels": ["bug"],
+        }
+        assert posted.headers["Authorization"] == "token ghs_1"
+
+    def test_a_refused_creation_is_a_github_error(self, app: GitHubApp, github: FakeGitHub) -> None:
+        github.on("POST", f"/repos/{REPO}/issues", {"message": "Issues are disabled"}, status=410)
+        with pytest.raises(GitHubError, match="Issues are disabled"):
+            app.create_issue(REPO, "Pin the parser", "", [])
+
+    def test_the_simulation_opens_nothing(self) -> None:
+        with pytest.raises(GitHubError):
+            SimulatedGitHub().create_issue(REPO, "Pin the parser", "", [])
+
     def test_a_review_is_pinned_to_the_reviewed_commit(
         self, app: GitHubApp, github: FakeGitHub
     ) -> None:

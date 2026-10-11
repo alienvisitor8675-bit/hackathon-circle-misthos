@@ -197,6 +197,10 @@ is real, or settle on Arc testnet as section 3 describes.
 5. **On GitHub:**
    1. Open an issue and add the `misthos` label. The App replies with the price,
       the band, the reasoning and the drafted criteria.
+      Or publish it from the web app instead: **Publish** takes `owner/name` or a
+      pasted GitHub link, and leaving the issue number **empty opens a new issue** in
+      that repository with the title and description, which is then priced. A number
+      the publisher gives is priced without creating anything.
    2. The publisher comments `/misthos approve`, or `/misthos criteria` and a list
       first; both can go in one comment, each on its own line, and they run in
       order. The App posts the funded price and criteria.

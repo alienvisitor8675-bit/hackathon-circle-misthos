@@ -66,6 +66,18 @@ class GitHubGateway(Protocol):
 
     # ------------------------------------------------------------ write path
 
+    creates_issues: bool
+    """Whether publishing may open an issue. Only a gateway acting as the App can;
+    the simulation keeps its own GitHub and opens none there."""
+
+    def create_issue(self, repo: str, title: str, body: str, labels: list[str]) -> int:
+        """Open an issue and return the number GitHub gave it.
+
+        A publisher who is describing work GitHub does not hold yet gets an issue
+        rather than a made-up number, so what is priced, reviewed and paid is an issue
+        that exists and can be linked to.
+        """
+
     def comment(self, repo: str, number: int, body: str) -> None: ...
 
     def review(

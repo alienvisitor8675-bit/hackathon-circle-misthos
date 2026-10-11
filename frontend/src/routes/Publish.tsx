@@ -139,11 +139,16 @@ export default function Publish() {
                     onChange={(e) => setNumber(e.target.value)}
                     inputMode="numeric"
                     pattern="[0-9]*"
-                    placeholder={health.data?.simulated ? 'optional' : '123'}
-                    required={!health.data?.simulated}
+                    placeholder={health.data?.simulated ? 'optional' : 'empty opens a new issue'}
                   />
                 </label>
               </div>
+              {!health.data?.simulated && !issueNumber && (
+                <p className="field-note">
+                  Leaving the number empty opens the issue on GitHub with this title and
+                  description, and prices the issue it creates.
+                </p>
+              )}
               <label className="field">
                 <span>Title</span>
                 <input
