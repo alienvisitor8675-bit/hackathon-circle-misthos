@@ -22,9 +22,6 @@ export default function AccountPage() {
 
   const simulated = health.data?.simulated ?? false
   const account = me.data?.account ?? null
-  // Set when an install sent GitHub back here; the login it reported is held until
-  // the wallet that was offered the install confirms it.
-  const pendingId = params.get('github') === 'pending' ? params.get('id') : null
 
   const enter = useMutation({
     mutationFn: async (pick: () => Promise<Signer> | Signer) => signIn(await pick()),
@@ -141,9 +138,6 @@ export default function AccountPage() {
             )}
             {account && <PayoutWallet account={account} />}
             {!account && <ChooseSide onDone={changed} />}
-            {account && !account.github_login && params.get('github') === 'pending' && pendingId && (
-              <ConfirmGitHub pendingId={pendingId} onDone={changed} />
-            )}
             {account && !account.github_login && health.data && (
               <LinkGitHub account={account} health={health.data} onDone={changed} />
             )}
@@ -193,7 +187,7 @@ function Repositories({ publisherId, linked }: { publisherId: string; linked: bo
         <p className="dim" style={{ marginBottom: 12 }}>
           {linked
             ? 'No repositories yet. Install the Misthos GitHub App on one, signed in to GitHub as the account you linked.'
-            : 'Nothing connected yet. Install the Misthos GitHub App, or link your GitHub account above if you already have — the repositories it covers then appear here.'}
+            : 'Nothing connected yet. Link your GitHub account above, then install the Misthos App on a repository — the repositories it covers appear here.'}
         </p>
       )}
       <p className="stat-hint">
@@ -341,74 +335,6 @@ function ChooseSide({ onDone }: { onDone: () => void }) {
   )
 }
 
-/**
- * The install flow's last step: GitHub reported who installed, and the wallet that was
- * handed the install link says yes.
- *
- * Installing with "Request user authorization (OAuth) during installation" sends
- * GitHub here without the state our own button issues, so the login is held instead of
- * bound. Confirming is what binds it — and it costs one click here rather than a whole
- * extra trip to GitHub.
- */
-function ConfirmGitHub({ pendingId, onDone }: { pendingId: string; onDone: () => void }) {
-  const held = useQuery({
-    queryKey: ['github-pending', pendingId],
-    queryFn: async () =>
-      unwrap(
-        await api.GET('/api/v1/auth/github/pending/{pending_id}', {
-          params: { path: { pending_id: pendingId } },
-        }),
-      ),
-    retry: false,
-  })
-  const confirm = useMutation({
-    mutationFn: async () =>
-      unwrap(
-        await api.POST('/api/v1/auth/github/confirm/{pending_id}', {
-          params: { path: { pending_id: pendingId } },
-        }),
-      ),
-    onSuccess: onDone,
-  })
-
-  if (held.isError) {
-    return (
-      <Panel title="Finish linking GitHub">
-        <div className="error-box form-error">
-          That link has expired. Install the App again from this page.
-        </div>
-      </Panel>
-    )
-  }
-  return (
-    <Panel title="Finish linking GitHub">
-      {held.data ? (
-        <>
-          <p className="dim" style={{ marginBottom: 14 }}>
-            GitHub says you are <strong>{held.data.login}</strong>. Link that account to this
-            wallet?
-          </p>
-          <div className="btn-row">
-            <button
-              className="btn primary"
-              disabled={confirm.isPending}
-              onClick={() => confirm.mutate()}
-            >
-              Link {held.data.login}
-            </button>
-            <Link className="btn" to="/account">
-              Not now
-            </Link>
-          </div>
-          {confirm.error && <div className="error-box form-error">{confirm.error.message}</div>}
-        </>
-      ) : (
-        <div className="empty">Checking with GitHub…</div>
-      )}
-    </Panel>
-  )
-}
-
 function LinkGitHub({
   account,
   health,
@@ -420,13 +346,6 @@ function LinkGitHub({
 }) {
   const [login, setLogin] = useState('')
   const way = linking(health)
-  // Only a publisher installs the App, and installing is what links as it goes — so
-  // when an App is configured this is offered first, as the one thing to do.
-  const repos = useQuery({
-    ...repositoriesQuery(account.party_id),
-    enabled: account.role === 'publisher',
-  })
-  const installUrl = account.role === 'publisher' ? (repos.data?.install_url ?? null) : null
 
   const start = useMutation({
     mutationFn: async () => unwrap(await api.POST('/api/v1/auth/github/start')),
@@ -447,23 +366,10 @@ function LinkGitHub({
           : 'Claiming needs a GitHub account: only pull requests you open count as your work.'}{' '}
         We keep your login and nothing else.
       </p>
-      {installUrl && (
-        <>
-          <p className="dim" style={{ marginBottom: 12 }}>
-            Installing the Misthos App on a repository also links your GitHub account, so
-            it is the only step: no separate sign-in.
-          </p>
-          <div className="btn-row">
-            <a className="btn primary" href={installUrl}>
-              Install the GitHub App
-            </a>
-          </div>
-        </>
-      )}
       {way.oauth && (
-        <div className="btn-row" style={{ marginTop: installUrl ? 10 : 0 }}>
-          <button className={installUrl ? 'btn' : 'btn primary'} onClick={() => start.mutate()} disabled={start.isPending}>
-            {installUrl ? 'Link without installing' : 'Link with GitHub'}
+        <div className="btn-row">
+          <button className="btn primary" onClick={() => start.mutate()} disabled={start.isPending}>
+            Link with GitHub
           </button>
         </div>
       )}

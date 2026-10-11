@@ -383,30 +383,39 @@ class TestThePublishersView:
         assert body["label"] == "misthos"
         assert body["install_url"] == "https://github.com/apps/misthos-dev/installations/new"
 
-    def test_a_signed_in_install_link_carries_the_state_that_finishes_the_link(
+    def test_an_installation_waits_for_the_wallet_that_claims_it(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Installing can be the only GitHub action a person takes.
+        """Install first and link later, and the repository appears.
 
-        With the App authorizing during installation, GitHub returns them to the
-        callback that already exists, so the state has to be on the install link for
-        that callback to accept it -- and it names the wallet that started it, which is
-        what stops a second wallet finishing the link.
+        This is the path taken when GitHub does not send the browser back from the
+        install -- the setting is not documented to, and it did not in practice. The
+        installation is then recorded with the login that made it and no publisher,
+        because no wallet is linked to that login yet. Linking is what claims it, and
+        the next read resolves it: `connections_of` walks every connection through
+        `connection()`, which re-resolves an unclaimed row by its `installed_by`.
+        Without that, an installer would be told to install again for ever.
         """
         monkeypatch.setattr(settings, "github_app_slug", "misthos-dev")
+        installed("late-maint")  # nobody is linked to that login yet: unclaimed
+
         client = TestClient(app)
-        wallet = Wallet(901)
+        wallet = Wallet(89)
         nonce = client.post(f"{API}/auth/nonce").json()["nonce"]
         message = wallet.message(nonce)
         client.post(
             f"{API}/auth/verify", json={"message": message, "signature": wallet.sign(message)}
         )
         publisher = client.post(
-            f"{API}/auth/role", json={"role": "publisher", "name": "acme-maint"}
+            f"{API}/auth/role", json={"role": "publisher", "name": "late-maint"}
         ).json()["party_id"]
 
-        install = client.get(f"{API}/publishers/{publisher}/repositories").json()["install_url"]
-        assert install.startswith("https://github.com/apps/misthos-dev/installations/new?state=")
+        # Linked to nothing: the installation is invisible to this publisher.
+        before = client.get(f"{API}/publishers/{publisher}/repositories").json()
+        assert before["repositories"] == []
 
-        state = install.split("state=", 1)[1]
-        assert store.coordinator.get(f"gh-link:{state}") == wallet.address.lower()
+        client.post(f"{API}/auth/github/simulate", json={"login": "late-maint"})
+
+        after = client.get(f"{API}/publishers/{publisher}/repositories").json()
+        assert [r["repo"] for r in after["repositories"]] == [REPO]
+

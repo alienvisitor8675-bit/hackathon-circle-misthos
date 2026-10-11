@@ -15,7 +15,6 @@ from fastapi import APIRouter, HTTPException, Query, Response
 from fastapi.concurrency import run_in_threadpool
 
 from misthos.api.session import SIGNED_IN, require_owner_or_simulation
-from misthos.api.v1.auth import mint_link_state, record_install_intent
 from misthos.config import settings
 from misthos.domain import plans
 from misthos.domain.policy import PolicyRefusal
@@ -152,21 +151,10 @@ async def repositories(publisher_id: str, account: Account | None = SIGNED_IN) -
     if await run_in_threadpool(store.get_publisher, publisher_id) is None:
         raise HTTPException(status_code=404, detail=f"no publisher {publisher_id}")
     slug = settings.github_app_slug
-    install_url = None
-    if slug:
-        install_url = f"https://github.com/apps/{slug}/installations/new"
-        if account is not None:
-            # Installing can be the only GitHub action a person takes. The App's
-            # "Request user authorization (OAuth) during installation" box makes the
-            # install authorize as it goes, and GitHub then returns them to the
-            # callback with a code -- so carrying this wallet's state means the install
-            # finishes the link the same way the OAuth button does, and the callback's
-            # guard covers both. `record_install_intent` is what lets a callback that
-            # arrives without that state be told from one nobody started here.
-            await record_install_intent(account.address)
-            install_url += f"?state={await mint_link_state(account.address)}"
     return RepositoriesOut(
         repositories=await run_in_threadpool(store.connections_of, publisher_id),
         label=settings.github_label,
-        install_url=install_url,
+        # Plain: installing connects repositories for label-driven pricing. It does not
+        # link anyone, so it carries no state and finishes no link.
+        install_url=f"https://github.com/apps/{slug}/installations/new" if slug else None,
     )
