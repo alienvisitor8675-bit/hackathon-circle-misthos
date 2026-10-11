@@ -14,12 +14,15 @@ x-backend: &backend
     MISTHOS_DATABASE_URL: postgresql+psycopg://misthos:misthos@postgres:5432/misthos
     MISTHOS_REDIS_URL: redis://redis:6379/0
     MISTHOS_LOG_JSON: "true"
-    # Anything else from backend/.env.example, such as the GitHub App or the review
-    # agent's key, can be passed through from your shell or an .env file here.
+    # The rest of backend/.env.example reaches the container the same way: one line
+    # here, reading your shell or an .env file next to this one.
     MISTHOS_GITHUB_APP_ID: ${MISTHOS_GITHUB_APP_ID:-}
     MISTHOS_GITHUB_APP_PRIVATE_KEY: ${MISTHOS_GITHUB_APP_PRIVATE_KEY:-}
     MISTHOS_GITHUB_WEBHOOK_SECRET: ${MISTHOS_GITHUB_WEBHOOK_SECRET:-dev-secret}
+    # The key and the endpoint it belongs to; empty here leaves the built-in
+    # DeepSeek endpoint, so only the key is needed.
     MISTHOS_ANTHROPIC_API_KEY: ${MISTHOS_ANTHROPIC_API_KEY:-}
+    MISTHOS_ANTHROPIC_API_URL: ${MISTHOS_ANTHROPIC_API_URL:-}
     MISTHOS_PUBLIC_URL: ${MISTHOS_PUBLIC_URL:-http://localhost:5173}
     MISTHOS_SESSION_SECRET: ${MISTHOS_SESSION_SECRET:-}
     MISTHOS_GITHUB_OAUTH_CLIENT_ID: ${MISTHOS_GITHUB_OAUTH_CLIENT_ID:-}
@@ -120,9 +123,12 @@ services:
     environment:
       EDGE_PORT: "8080"
       CORE_API_URL: http://api:8000
-      # Simulated by default, like the API. Settling x402 payments for real needs
-      # MISTHOS_SIMULATED=false and a seller address; see edge/.env.example for the
-      # facilitator, the networks and the mainnet confirmation.
+      # Simulated by default, like the API, and read the way the API reads it: true or
+      # false, 1/0, yes/no, on/off, t/f or y/n; anything else stops the edge. Live, the
+      # one flag makes both the x402 gate and the Circle wallet routes real, so the edge
+      # refuses to start without a seller address, CIRCLE_API_KEY, CIRCLE_APP_ID and
+      # EDGE_CORE_TOKEN; this file does not pass the last three through yet. See
+      # edge/.env.example for the facilitator, the networks and the mainnet confirmation.
       MISTHOS_SIMULATED: ${MISTHOS_SIMULATED:-true}
       MISTHOS_SELLER_ADDRESS: ${MISTHOS_SELLER_ADDRESS:-}
       GATEWAY_FACILITATOR_URL: ${GATEWAY_FACILITATOR_URL:-}
