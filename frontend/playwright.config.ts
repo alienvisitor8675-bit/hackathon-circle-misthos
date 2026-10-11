@@ -56,6 +56,9 @@ export default defineConfig({
         // must never do that, whatever backend/.env says.
         MISTHOS_GITHUB_APP_ID: '',
         MISTHOS_GITHUB_APP_PRIVATE_KEY: '',
+        // The slug alone is not an App: it only lets the API hand out an install link,
+        // which is what the install-button test needs. Nothing else changes.
+        MISTHOS_GITHUB_APP_SLUG: 'misthos-dev',
       },
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,

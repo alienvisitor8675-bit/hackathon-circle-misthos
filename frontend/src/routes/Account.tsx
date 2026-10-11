@@ -155,19 +155,27 @@ export default function AccountPage() {
 }
 
 /**
+ * The repositories a publisher installed the App on, and where to install it.
+ *
+ * Shared by the panel below and by the linking panel, which offers installing as the
+ * way to link: one query key and one fetcher, so React Query makes one request.
+ */
+const repositoriesQuery = (publisherId: string) => ({
+  queryKey: ['repositories', publisherId],
+  queryFn: async () =>
+    unwrap(
+      await api.GET('/api/v1/publishers/{publisher_id}/repositories', {
+        params: { path: { publisher_id: publisherId } },
+      }),
+    ),
+})
+
+/**
  * Repositories the publisher installed the GitHub App on (#6). There, an issue is
  * priced by a label and funded by a comment, without coming back here.
  */
 function Repositories({ publisherId, linked }: { publisherId: string; linked: boolean }) {
-  const { data } = useQuery({
-    queryKey: ['repositories', publisherId],
-    queryFn: async () =>
-      unwrap(
-        await api.GET('/api/v1/publishers/{publisher_id}/repositories', {
-          params: { path: { publisher_id: publisherId } },
-        }),
-      ),
-  })
+  const { data } = useQuery(repositoriesQuery(publisherId))
   if (!data) return null
   return (
     <Panel title="Your repositories">
@@ -193,10 +201,13 @@ function Repositories({ publisherId, linked }: { publisherId: string; linked: bo
         it priced, then comment <code>/misthos approve</code> on it to commit the funds.
         Contributors claim it with <code>/misthos claim</code>.
       </p>
-      {data.install_url && (
+      {data.install_url && linked && (
+        // Offered here once GitHub is linked, to install on another repository. When it
+        // is not linked the linking panel above carries this call to action, so the page
+        // never shows it twice.
         <div className="btn-row" style={{ marginTop: 12 }}>
-          <a className="btn" href={data.install_url} target="_blank" rel="noreferrer">
-            Install the GitHub App
+          <a className="btn" href={data.install_url}>
+            Install the GitHub App on another repository
           </a>
         </div>
       )}
@@ -409,6 +420,13 @@ function LinkGitHub({
 }) {
   const [login, setLogin] = useState('')
   const way = linking(health)
+  // Only a publisher installs the App, and installing is what links as it goes — so
+  // when an App is configured this is offered first, as the one thing to do.
+  const repos = useQuery({
+    ...repositoriesQuery(account.party_id),
+    enabled: account.role === 'publisher',
+  })
+  const installUrl = account.role === 'publisher' ? (repos.data?.install_url ?? null) : null
 
   const start = useMutation({
     mutationFn: async () => unwrap(await api.POST('/api/v1/auth/github/start')),
@@ -429,10 +447,23 @@ function LinkGitHub({
           : 'Claiming needs a GitHub account: only pull requests you open count as your work.'}{' '}
         We keep your login and nothing else.
       </p>
+      {installUrl && (
+        <>
+          <p className="dim" style={{ marginBottom: 12 }}>
+            Installing the Misthos App on a repository also links your GitHub account, so
+            it is the only step: no separate sign-in.
+          </p>
+          <div className="btn-row">
+            <a className="btn primary" href={installUrl}>
+              Install the GitHub App
+            </a>
+          </div>
+        </>
+      )}
       {way.oauth && (
-        <div className="btn-row">
-          <button className="btn primary" onClick={() => start.mutate()} disabled={start.isPending}>
-            Link with GitHub
+        <div className="btn-row" style={{ marginTop: installUrl ? 10 : 0 }}>
+          <button className={installUrl ? 'btn' : 'btn primary'} onClick={() => start.mutate()} disabled={start.isPending}>
+            {installUrl ? 'Link without installing' : 'Link with GitHub'}
           </button>
         </div>
       )}
