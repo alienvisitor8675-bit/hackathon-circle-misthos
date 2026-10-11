@@ -115,6 +115,14 @@ Not a number. A short brief:
 - A confidence level, low, medium or high, based on how much comparable history exists.
 - A one-paragraph justification the publisher can forward to whoever approves budgets.
 
+**The band is a choice, not a report.** The publisher names any price from the low end
+to the high end, and that price is what the escrow records as its ceiling: an agent can
+later commit up to it and no further, so the number a person picked is what bounds the
+money. Leaving the band alone takes the recommendation, which is the midpoint. Two
+floors apply, and a price outside them is refused with the range rather than quietly
+adjusted: the bottom of the tier's minimum, below which review costs more than the take
+it earns, and the publisher's own remaining budget, which caps the top.
+
 That last item is a small feature with an outsized effect. The buyer's hardest step is not knowing the price, it is getting the price approved. Writing the email for them is cheaper than any training data.
 
 ### When the buyer cannot afford the work

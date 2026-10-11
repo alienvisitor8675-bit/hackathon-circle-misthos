@@ -22,7 +22,7 @@ from misthos.domain.escrow import approve_call, commit_call, issue_key
 from misthos.domain.issue import ESCROW_TERM, IllegalTransition, IssueState
 from misthos.domain.money import Usdc
 from misthos.domain.policy import PolicyRefusal
-from misthos.domain.pricing import UnfundableIssue
+from misthos.domain.pricing import PriceChoiceRefused, UnfundableIssue
 from misthos.repositories import StaleIssue
 from misthos.schemas import (
     Account,
@@ -36,6 +36,7 @@ from misthos.schemas import (
     DemoPullRequestOut,
     DisputeRequest,
     EscrowReadback,
+    FundRequest,
     HealthOut,
     IssueOut,
     IssueSummaryOut,
@@ -236,9 +237,11 @@ async def get_escrow(issue_id: str) -> EscrowReadback:
     )
 
 
-async def _act(step: Callable[..., IssueRecord], issue_id: str, *args: object) -> IssueOut:
+async def _act(
+    step: Callable[..., IssueRecord], issue_id: str, *args: object, **kwargs: object
+) -> IssueOut:
     try:
-        rec = await run_in_threadpool(step, issue_id, *args)
+        rec = await run_in_threadpool(step, issue_id, *args, **kwargs)
     except (
         IllegalTransition,
         StaleIssue,
@@ -252,6 +255,10 @@ async def _act(step: Callable[..., IssueRecord], issue_id: str, *args: object) -
         raise _conflict(exc) from exc
     except (ComplianceRefusal, PolicyRefusal, NotSimulated) as exc:
         raise _refused(exc) from exc
+    except PriceChoiceRefused as exc:
+        # The request named a price; it is the value in it that cannot be used, which is
+        # what 422 says, rather than the party being refused.
+        raise HTTPException(status_code=422, detail=exc.justification) from exc
     except UntestableCriteria as exc:
         # Shaped like a validation error, so a client shows each reason by its criterion.
         raise HTTPException(
@@ -395,18 +402,38 @@ async def approve_criteria(
 async def fund(
     issue_id: str,
     request: Request,
+    payload: FundRequest | None = None,
     idempotency_key: str | None = IDEMPOTENCY_KEY,
     account: Account | None = SIGNED_IN,
 ) -> Any:
-    """The publisher approves the price, and the money is committed to the escrow."""
+    """The publisher approves a price, and the money is committed to the escrow.
+
+    They may name their own, which the engine checks against the band it disclosed;
+    without one the recommendation is approved.
+    """
     rec = await _require(issue_id)
     require_owner_or_simulation(account, rec.publisher_id, "fund this issue")
     if account is not None:
         require_github(account, "fund an issue")
     by = _who(account, "the publisher")
+    amount = _price(payload.amount if payload else None)
     return await idempotent(
-        request, idempotency_key, lambda: _act(store.approve_price, issue_id, by)
+        request,
+        idempotency_key,
+        lambda: _act(store.approve_price, issue_id, by, amount=amount),
     )
+
+
+def _price(text: str | None) -> Usdc | None:
+    """The publisher's own price, or None to take the engine's recommendation."""
+    if text is None or not text.strip():
+        return None
+    try:
+        return Usdc.from_decimal(text.strip().replace(",", ""))
+    except (ArithmeticError, ValueError) as exc:
+        raise HTTPException(
+            status_code=422, detail=f"{text!r} is not an amount in USDC"
+        ) from exc
 
 
 @router.post("/issues/{issue_id}/claim", response_model=IssueOut, dependencies=[limit_actions])

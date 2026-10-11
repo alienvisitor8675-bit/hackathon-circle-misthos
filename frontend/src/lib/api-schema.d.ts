@@ -371,7 +371,10 @@ export interface paths {
         put?: never;
         /**
          * Fund
-         * @description The publisher approves the price, and the money is committed to the escrow.
+         * @description The publisher approves a price, and the money is committed to the escrow.
+         *
+         *     They may name their own, which the engine checks against the band it disclosed;
+         *     without one the recommendation is approved.
          */
         post: operations["fund_api_v1_issues__issue_id__fund_post"];
         delete?: never;
@@ -1346,6 +1349,17 @@ export interface components {
              * @default
              */
             note: string;
+        };
+        /**
+         * FundRequest
+         * @description The price the publisher commits, when they name one of their own.
+         *
+         *     Empty means the engine's recommendation, which is what the form did before a
+         *     publisher could choose a position in the band.
+         */
+        FundRequest: {
+            /** Amount */
+            amount?: string | null;
         };
         /** GitHubLinkStart */
         GitHubLinkStart: {
@@ -2838,7 +2852,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["FundRequest"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {

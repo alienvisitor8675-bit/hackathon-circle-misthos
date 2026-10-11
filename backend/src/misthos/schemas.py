@@ -434,6 +434,17 @@ class RoleRequest(BaseModel):
     """A publisher's declared budget, which caps every price it is offered."""
 
 
+class FundRequest(BaseModel):
+    """The price the publisher commits, when they name one of their own.
+
+    Empty means the engine's recommendation, which is what the form did before a
+    publisher could choose a position in the band.
+    """
+
+    amount: str | None = None
+    """USDC, as decimal text. Checked against the issue's band by the pricing engine."""
+
+
 class GitHubLinkStart(BaseModel):
     authorize_url: str
 

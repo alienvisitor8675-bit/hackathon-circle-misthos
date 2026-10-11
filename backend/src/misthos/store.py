@@ -68,6 +68,7 @@ from misthos.domain.pricing import (
     WEIGHTS,
     ComplexitySignals,
     UnfundableIssue,
+    choose,
     effort,
     propose,
     take_rate_bps,
@@ -689,7 +690,9 @@ class Store:
         assert held is not None, f"{rec.id} has no commitment to settle"
         return held.committed
 
-    def _fund(self, rec: IssueRecord, when: datetime | None = None) -> None:
+    def _fund(
+        self, rec: IssueRecord, when: datetime | None = None, amount: Usdc | None = None
+    ) -> None:
         assert rec.proposal is not None
         if rec.criteria_approved_at is None:
             raise CriteriaNotApproved(
@@ -701,7 +704,12 @@ class Store:
         # chain refuses, nothing is saved and the copy in hand is thrown away.
         self._move(rec, IssueState.FUNDED)
         at = when or _now()
+        # The publisher's own price when they named one, inside the band and under what
+        # their budget allows; the engine's recommendation otherwise.
         committed = rec.proposal.recommended
+        if amount is not None:
+            ceiling, _ = self._ceiling(publisher)
+            committed = choose(rec.proposal, amount, ceiling=ceiling, tier=publisher.tier)
         deadline = at + lifecycle.ESCROW_TERM
         # The approved price goes to the escrow as its ceiling first: the escrow
         # refuses any commitment without one or above it, so what an agent can commit
@@ -2742,8 +2750,19 @@ class Store:
             self.repo.save_issues(rec)
             return rec
 
-    def approve_price(self, issue_id: str, by: str, now: datetime | None = None) -> IssueRecord:
-        """The publisher approves the price, and the money is committed."""
+    def approve_price(
+        self,
+        issue_id: str,
+        by: str,
+        now: datetime | None = None,
+        amount: Usdc | None = None,
+    ) -> IssueRecord:
+        """The publisher approves a price, and the money is committed.
+
+        The price is the engine's recommendation unless the publisher names their own,
+        which has to sit inside the band the engine disclosed -- a range exists so the
+        buyer can pick a position in it (docs/misthos/06-pricing-engine.md).
+        """
         self.ensure_ready()
         with self._exclusive(issue_id), self._posting():
             rec = self.repo.get_issue(issue_id)
@@ -2752,12 +2771,17 @@ class Store:
             if rec.state is not IssueState.AWAITING_APPROVAL:
                 raise lifecycle.IllegalTransition(rec.state, IssueState.FUNDED)
             self._approve_and_fund(
-                rec, now or _now(), f"{by} approved the price and committed the funds"
+                rec,
+                now or _now(),
+                f"{by} approved the price and committed the funds",
+                amount=amount,
             )
             self.repo.save_issues(rec)
             return rec
 
-    def _approve_and_fund(self, rec: IssueRecord, now: datetime, outcome: str) -> None:
+    def _approve_and_fund(
+        self, rec: IssueRecord, now: datetime, outcome: str, amount: Usdc | None = None
+    ) -> None:
         if rec.criteria_approved_at is None:
             raise CriteriaNotApproved(
                 f"{rec.id} cannot be funded until the publisher approves its acceptance criteria"
@@ -2768,7 +2792,7 @@ class Store:
         # concurrent fundings of different issues both pass the check.
         with self._publisher_exclusive(rec.publisher_id):
             self._check_category_limits(rec, now)
-            self._fund(rec)
+            self._fund(rec, amount=amount)
         self._log(
             rec,
             actor="publisher",

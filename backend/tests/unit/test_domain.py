@@ -7,6 +7,7 @@ and lifecycle transitions.
 
 from __future__ import annotations
 
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
@@ -31,9 +32,13 @@ from misthos.domain.pricing import (
     TAKE_RATE_BY_TIER,
     WEIGHTS,
     ComplexitySignals,
+    PriceChoiceRefused,
+    PriceProposal,
+    choose,
     effort,
     min_fix_price,
     platform_fee,
+    priced_range,
     propose,
     relist,
     take_rate_bps,
@@ -381,3 +386,75 @@ class TestComparables:
         p = propose(MID, comparables=found(history))
         assert len(p.comparables) == 3
         assert all(ref.issue_id in p.comparables_note for ref in p.comparables)
+
+
+def band_of(low: str, high: str) -> PriceProposal:
+    """A proposal with exactly the band under test, and the midpoint inside it."""
+    base = propose(MID)
+    lo, hi = Usdc.from_decimal(low), Usdc.from_decimal(high)
+    return replace(
+        base,
+        band_low=lo,
+        band_high=hi,
+        recommended=Usdc((lo.base_units + hi.base_units) // 2),
+    )
+
+
+class TestChoosingAPositionInTheBand:
+    """The band is wide on purpose so the buyer picks a position in it.
+
+    `docs/misthos/06-pricing-engine.md`: "A range invites the buyer to pick a position
+    inside it, which is the behaviour we want." Approving the recommendation is one
+    position, not the only one, and the bounds have to be usable at the precision the
+    band is shown at.
+    """
+
+    def test_a_price_inside_the_band_is_taken_as_given(self) -> None:
+        p = band_of("1000", "2000")
+        assert choose(p, Usdc.from_decimal("1500")) == Usdc.from_decimal("1500")
+
+    def test_the_edges_are_inside(self) -> None:
+        p = band_of("1000", "2000")
+        assert choose(p, p.band_low) == p.band_low
+        assert choose(p, p.band_high) == p.band_high
+
+    def test_a_price_just_outside_is_refused_with_the_range(self) -> None:
+        p = band_of("1000", "2000")
+        for outside in (p.band_low - Usdc(1), p.band_high + Usdc(1)):
+            with pytest.raises(PriceChoiceRefused) as refused:
+                choose(p, outside)
+            assert "outside the" in refused.value.justification
+
+    def test_the_range_is_usable_at_the_precision_it_is_shown_at(self) -> None:
+        """The band carries more precision than the page shows.
+
+        A low of 1734.163200 is displayed as 1734.16, and a publisher who types the
+        number they can read must not be refused for being three thousandths under a
+        figure that was never displayed. The bounds are rounded outwards to the cent.
+        """
+        p = band_of("1734.1632", "3468.3264")
+        shown_low = f"{p.band_low.decimal:.2f}"
+        shown_high = f"{p.band_high.decimal:.2f}"
+
+        assert Usdc.from_decimal(shown_low) < p.band_low, "the trap this guards against"
+        assert choose(p, Usdc.from_decimal(shown_low)) == Usdc.from_decimal(shown_low)
+        assert choose(p, Usdc.from_decimal(shown_high)) == Usdc.from_decimal(shown_high)
+
+    def test_the_floor_binds_when_the_band_starts_below_it(self) -> None:
+        """Nothing may be priced under where review pays for itself."""
+        floor = min_fix_price("open")
+        p = band_of("1", "1000")
+        low, _ = priced_range(p, tier="open")
+
+        assert low == floor
+        with pytest.raises(PriceChoiceRefused):
+            choose(p, Usdc(floor.base_units - 1), tier="open")
+
+    def test_the_ceiling_binds_when_the_band_reaches_past_it(self) -> None:
+        p = band_of("1000", "5000")
+        ceiling = Usdc.from_decimal("2000")
+        _, high = priced_range(p, ceiling=ceiling, tier="open")
+
+        assert high == ceiling
+        with pytest.raises(PriceChoiceRefused):
+            choose(p, Usdc.from_decimal("2001"), ceiling=ceiling, tier="open")

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
@@ -483,6 +484,65 @@ class TestPublish:
             json={"repo": "a/b", "title": "Add a health endpoint", "publisher_id": "PUB-1"},
         ).json()
         assert body["proposal"]["fundable"] is True
+
+
+class TestChoosingThePrice:
+    """The band is deliberately wide so the buyer can pick a position in it.
+
+    A single point estimate invites a fight over the exact number, and the doc says the
+    range exists to be chosen from (docs/misthos/06-pricing-engine.md). Approving the
+    engine's recommendation is one position, not the only one.
+    """
+
+    def _awaiting(self, client: TestClient) -> tuple[str, dict]:
+        rows = client.get(f"{API}/issues", params={"state": "awaiting_approval"}).json()
+        assert rows, "the seed has no issue awaiting approval"
+        issue_id = rows[0]["id"]
+        issue = client.get(f"{API}/issues/{issue_id}").json()
+        approved = client.post(
+            f"{API}/issues/{issue_id}/criteria", json={"criteria": issue["acceptance_criteria"]}
+        )
+        assert approved.status_code == 200, approved.text
+        return issue_id, issue
+
+    def test_the_publishers_own_price_is_the_one_committed(self, client: TestClient) -> None:
+        issue_id, issue = self._awaiting(client)
+        band = issue["proposal"]
+        chosen = Decimal(str(band["band_low"]["usdc"]))
+        assert chosen != Decimal(str(band["recommended"]["usdc"])), "pick a real position"
+
+        funded = client.post(f"{API}/issues/{issue_id}/fund", json={"amount": str(chosen)})
+
+        assert funded.status_code == 200, funded.text
+        committed = Decimal(str(funded.json()["escrow"]["amount"]["usdc"]))
+        assert committed == chosen
+        # And the escrow's ceiling is what was approved, not the engine's midpoint.
+        assert funded.json()["proposal"]["recommended"]["usdc"] != f"{chosen:.2f}"
+        readback = client.get(f"{API}/issues/{issue_id}/escrow").json()
+        assert Decimal(str(readback["escrow_ceiling"]["usdc"])) == chosen
+
+    def test_no_amount_still_takes_the_recommendation(self, client: TestClient) -> None:
+        issue_id, issue = self._awaiting(client)
+        funded = client.post(f"{API}/issues/{issue_id}/fund")
+        assert funded.status_code == 200, funded.text
+        assert funded.json()["escrow"]["amount"]["usdc"] == issue["proposal"]["recommended"]["usdc"]
+
+    def test_a_price_outside_the_band_is_refused_with_the_reason(
+        self, client: TestClient
+    ) -> None:
+        issue_id, issue = self._awaiting(client)
+        high = Decimal(str(issue["proposal"]["band_high"]["usdc"]))
+        r = client.post(f"{API}/issues/{issue_id}/fund", json={"amount": str(high + 1)})
+        assert r.status_code == 422, r.text
+        assert "outside the" in r.json()["detail"]
+        # Refused, so nothing was committed and the issue still waits.
+        assert client.get(f"{API}/issues/{issue_id}").json()["state"] == "AWAITING_APPROVAL"
+
+    def test_something_that_is_not_an_amount_is_refused(self, client: TestClient) -> None:
+        issue_id, _ = self._awaiting(client)
+        r = client.post(f"{API}/issues/{issue_id}/fund", json={"amount": "about a grand"})
+        assert r.status_code == 422
+        assert "not an amount in USDC" in r.json()["detail"]
 
 
 class TestMetrics:

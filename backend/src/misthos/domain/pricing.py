@@ -78,6 +78,9 @@ def platform_fee(amount: Usdc, tier: str = "open") -> Usdc:
     return Usdc(amount.base_units * take_rate_bps(tier) // 10_000)
 
 
+# The precision a price is shown and chosen at.
+CENT = Decimal("0.01")
+
 BAND_LOW = Decimal("0.7")
 BAND_HIGH = Decimal("1.4")
 
@@ -89,6 +92,14 @@ RELIST_UPLIFT = Decimal("1.25")
 
 class UnfundableIssue(Exception):
     """The engine will not put a price on this issue, and says why."""
+
+    def __init__(self, justification: str) -> None:
+        super().__init__(justification)
+        self.justification = justification
+
+
+class PriceChoiceRefused(Exception):
+    """The publisher's own price is outside what the engine will stand behind."""
 
     def __init__(self, justification: str) -> None:
         super().__init__(justification)
@@ -297,6 +308,53 @@ def _justify(
     if extra:
         parts.extend(extra)
     return " ".join(parts)
+
+
+def priced_range(
+    proposal: PriceProposal, *, ceiling: Usdc | None = None, tier: str = "open"
+) -> tuple[Usdc, Usdc]:
+    """The lowest and highest price a publisher may choose for this issue.
+
+    The band is what the engine is willing to stand behind, the floor is where review
+    pays for itself, and the ceiling is what the publisher's budget still allows. The
+    lower of the two floors and the higher of the two caps is what a choice may sit in,
+    so a range is refused only when nothing inside it would work.
+    """
+    low = proposal.band_low if proposal.band_low > min_fix_price(tier) else min_fix_price(tier)
+    high = proposal.band_high
+    if ceiling is not None and ceiling < high:
+        high = ceiling
+    # Rounded outwards to the cent, because a cent is the precision the band is shown
+    # at. The engine's band carries more: a low of 1734.163200 is shown as 1734.16, and
+    # a publisher who types the number they can read would otherwise be refused for
+    # being three thousandths below a figure the page never displayed.
+    return (
+        Usdc.from_decimal(low.decimal.quantize(CENT, rounding="ROUND_FLOOR")),
+        Usdc.from_decimal(high.decimal.quantize(CENT, rounding="ROUND_CEILING")),
+    )
+
+
+def choose(
+    proposal: PriceProposal,
+    amount: Usdc,
+    *,
+    ceiling: Usdc | None = None,
+    tier: str = "open",
+) -> Usdc:
+    """The publisher's own position inside the band.
+
+    The band is deliberately wide, and a range invites the buyer to pick a position in
+    it rather than argue about one number (docs/misthos/06-pricing-engine.md). A choice
+    outside it is refused with the range that would work, rather than quietly adjusted:
+    silently moving someone's price is how a commitment stops matching what they agreed
+    to, and the escrow records the approved amount as its ceiling.
+    """
+    low, high = priced_range(proposal, ceiling=ceiling, tier=tier)
+    if amount < low or amount > high:
+        raise PriceChoiceRefused(
+            f"{amount} is outside the {low} to {high} this issue may be priced at"
+        )
+    return amount
 
 
 def relist(proposal: PriceProposal, *, ceiling: Usdc | None = None) -> PriceProposal | None:

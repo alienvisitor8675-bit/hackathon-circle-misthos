@@ -132,6 +132,10 @@ store behind the same `SecretStore` interface. Fund both signers with a little U
 which is Arc's gas. The owner is the deployer unless ownership was transferred; the
 attestor is the address passed as `MISTHOS_ATTESTOR_ADDRESS` at deploy.
 
+The publisher names the price, anywhere in the band the engine proposed, and it is that
+price the escrow records as its ceiling -- not the engine's recommendation unless the
+publisher leaves the field alone.
+
 Funding takes two approvals. The first records the ceiling and is refused with
 `NotCommitted`; the web app then has the publisher's wallet send the two calls from
 `GET /api/v1/issues/{id}/commitment` (the USDC allowance, then the commitment) and

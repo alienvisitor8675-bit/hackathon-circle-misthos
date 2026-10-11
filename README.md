@@ -25,8 +25,9 @@ for the transaction to become routine.
 
 An enterprise or a maintainer picks an issue and attaches money to it. The pricing agent
 reads the issue, the surrounding code and the buyer's financial context, then proposes a
-price band with its reasoning. The publisher approves the price, and the funds are
-committed to an escrow contract on Arc. The first contributor to claim the issue holds it
+price band with its reasoning. The publisher names a price anywhere in that band, and
+it becomes the escrow ceiling, so the band is something to choose from rather than a
+figure to accept. The funds are committed to an escrow contract on Arc. The first contributor to claim the issue holds it
 exclusively, opens a pull request, and gets an automated review against the acceptance
 criteria and the repository's own checks. A human on the publisher's side makes the final
 acceptance call, and the contract releases payment.

@@ -57,7 +57,7 @@ stateDiagram-v2
     Draft --> Priced: pricing agent proposes a band
     Priced --> AwaitingApproval: publisher reviews the reasoning
     AwaitingApproval --> Draft: publisher overrides, agent re-prices
-    AwaitingApproval --> Funded: publisher approves the price and commits funds
+    AwaitingApproval --> Funded: publisher picks a price in the band and commits funds
     Funded --> Claimed: contributor takes an exclusive time-boxed claim
     Claimed --> Funded: claim expires without a pull request
     Claimed --> InReview: contributor opens a pull request
