@@ -133,8 +133,11 @@ export default function AccountPage() {
               </div>
             </Panel>
 
-            {account?.role === 'publisher' && account.github_login && (
-              <Repositories publisherId={account.party_id} />
+            {/* Offered whether or not GitHub is linked yet: installing the App authorizes
+                as it goes and finishes the link, so for a publisher who has not linked it
+                is the whole of what they have to do. */}
+            {account?.role === 'publisher' && (
+              <Repositories publisherId={account.party_id} linked={Boolean(account.github_login)} />
             )}
             {account && <PayoutWallet account={account} />}
             {!account && <ChooseSide onDone={changed} />}
@@ -155,7 +158,7 @@ export default function AccountPage() {
  * Repositories the publisher installed the GitHub App on (#6). There, an issue is
  * priced by a label and funded by a comment, without coming back here.
  */
-function Repositories({ publisherId }: { publisherId: string }) {
+function Repositories({ publisherId, linked }: { publisherId: string; linked: boolean }) {
   const { data } = useQuery({
     queryKey: ['repositories', publisherId],
     queryFn: async () =>
@@ -180,8 +183,9 @@ function Repositories({ publisherId }: { publisherId: string }) {
         </ul>
       ) : (
         <p className="dim" style={{ marginBottom: 12 }}>
-          No repositories yet. Install the Misthos GitHub App on one, signed in to GitHub as
-          the account you linked.
+          {linked
+            ? 'No repositories yet. Install the Misthos GitHub App on one, signed in to GitHub as the account you linked.'
+            : 'Install the Misthos GitHub App on a repository and you are set: installing also links your GitHub account, so there is no separate sign-in step.'}
         </p>
       )}
       <p className="stat-hint">
