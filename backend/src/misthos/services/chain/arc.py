@@ -55,14 +55,19 @@ __all__ = ["ArcEscrow", "ChainUnavailable"]
 class ArcEscrow:
     name = "arc"
 
-    # A node caps how wide one `eth_getLogs` may be, and Arc refuses anything past
-    # 100,000 blocks: "request exceeded max allowed range". Asking once from the
-    # deploy block to the head therefore worked only while the chain was young, and
-    # then every reconcile failed for good -- the sweeper retried every minute and
-    # never succeeded, so no claim expired, no deadline refunded and no silent
-    # publisher was ever released. The range is walked in windows instead, sized
-    # under that cap.
-    LOG_RANGE_BLOCKS = 50_000
+    # A node caps how wide one `eth_getLogs` may be, and asking once from the deploy
+    # block to the head worked only while the chain was young: past the cap every
+    # reconcile failed for good, so the sweeper retried every minute and never
+    # succeeded -- no claim expired, no deadline refunded and no silent publisher was
+    # ever released.
+    #
+    # Arc testnet's own cap was measured rather than guessed. Against
+    # https://rpc.testnet.arc.io, a query ending at the head was accepted at 9,999
+    # blocks and refused at 10,000 with `-32012 "requested range too large"`; a wider
+    # query is refused earlier with `-32602 "query exceeds max block range 100000"`.
+    # So the real cap here is 10,000, and this walks half of it: margin for a node
+    # whose limit differs, and the windows still tile the range exactly.
+    LOG_RANGE_BLOCKS = 5_000
 
     def __init__(
         self,

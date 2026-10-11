@@ -202,7 +202,11 @@ class TestArcEscrow:
         ArcEscrow("http://rpc", deployed, transport=transport).commitments()
 
         ranges = [b["params"][0] for b in seen if b["method"] == "eth_getLogs"]
-        assert len(ranges) == 4
+        assert len(ranges) == 4  # the range tiled exactly, so no window was widened
+        # Under the cap Arc enforces. Measured on Arc testnet: 9,999 blocks accepted,
+        # 10,000 refused with "requested range too large". Nothing here may exceed it,
+        # because a refused window fails the whole reconcile and with it every sweep.
+        assert ArcEscrow.LOG_RANGE_BLOCKS <= 9_999
         for window in ranges:
             width = int(window["toBlock"], 16) - int(window["fromBlock"], 16) + 1
             assert width <= ArcEscrow.LOG_RANGE_BLOCKS
