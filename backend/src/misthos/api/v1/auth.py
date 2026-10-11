@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import secrets
 from datetime import UTC, datetime, timedelta
 from urllib.parse import urlsplit
@@ -18,6 +19,7 @@ from misthos.repositories import AccountConflict
 from misthos.schemas import (
     Account,
     GitHubLinkStart,
+    GitHubPendingOut,
     MeOut,
     NonceOut,
     RoleRequest,
@@ -157,6 +159,18 @@ async def choose_role(payload: RoleRequest, request: Request) -> Account:
 LINK_SLOT = "gh-link"
 """Where a link's state is kept between starting it and GitHub returning it."""
 
+INSTALL_SLOT = "gh-install"
+"""That a wallet was handed the install link.
+
+The install link carries a link state, but GitHub is not documented to return it, so a
+callback from an install may arrive with no state at all. This is what tells such a
+callback apart from one nobody started here: only a wallet that was shown the install
+link has it.
+"""
+
+PENDING_SLOT = "gh-pending"
+"""A login GitHub reported, kept until the wallet that asked to install confirms it."""
+
 
 async def mint_link_state(address: str) -> str:
     """A single-use state for a GitHub link, whichever flow finishes it.
@@ -170,6 +184,22 @@ async def mint_link_state(address: str) -> str:
     state = secrets.token_urlsafe(24)
     await run_in_threadpool(store.coordinator.put, f"{LINK_SLOT}:{state}", address, NONCE_TTL)
     return state
+
+
+async def record_install_intent(address: str) -> None:
+    """Remember that this wallet was offered the install link."""
+    await run_in_threadpool(store.coordinator.put, f"{INSTALL_SLOT}:{address}", "1", NONCE_TTL)
+
+
+async def _pending_login(pending_id: str, address: str) -> dict[str, str]:
+    """What GitHub reported, if this wallet is the one that asked to install."""
+    held = await run_in_threadpool(store.coordinator.get, f"{PENDING_SLOT}:{pending_id}")
+    if held is None:
+        raise HTTPException(status_code=404, detail="this link is unknown or expired")
+    found = json.loads(str(held))
+    if found.get("address") != address:
+        raise HTTPException(status_code=403, detail="this link belongs to another wallet")
+    return found
 
 
 @router.post(
@@ -207,9 +237,9 @@ async def start_github_link(
 
 @router.get("/github/callback", include_in_schema=False)
 async def github_callback(
-    request: Request, code: str, state: str
+    request: Request, code: str, state: str | None = None
 ) -> RedirectResponse:
-    """Finish a link the *same* signed-in wallet started.
+    """Finish a link, from either of the two ways one can start.
 
     The state is server-side, so it proves the flow began here; it does not prove who
     is finishing it. Without the session check any caller could start a link with
@@ -218,10 +248,18 @@ async def github_callback(
     publishing, claiming and submitting, so the attacker would then be paid for work
     the victim opened. The account is therefore taken from the session and must match
     the address the state was issued to.
+
+    A callback with no state at all is the install flow: with "Request user
+    authorization (OAuth) during installation" on, GitHub sends the person here as
+    part of installing, and it is not documented to return the state our install link
+    carries. Linking on that would be the same hole, so the login is put aside and the
+    wallet that was offered the install link confirms it instead.
     """
     address = await signed_in_address(request)
     if address is None:
         raise HTTPException(status_code=401, detail="sign in to finish linking GitHub")
+    if state is None:
+        return await _hold_for_confirmation(code, address)
     slot = f"{LINK_SLOT}:{state}"
     started_by = await run_in_threadpool(store.coordinator.get, slot)
     if started_by is None:
@@ -243,6 +281,65 @@ async def github_callback(
     except AccountConflict as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return RedirectResponse(f"{settings.public_url.rstrip('/')}/account?linked=github", 303)
+
+
+async def _hold_for_confirmation(code: str, address: str) -> RedirectResponse:
+    """Put the reported login aside for the wallet that was offered the install."""
+    offered = await run_in_threadpool(store.coordinator.get, f"{INSTALL_SLOT}:{address}")
+    if offered is None:
+        raise HTTPException(
+            status_code=400,
+            detail="this link was not started here: install the App from your account page",
+        )
+    client = oauth()
+    if client is None:
+        raise not_configured()
+    try:
+        login = await run_in_threadpool(client.login_for, code, callback_url())
+    except GitHubError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    pending_id = secrets.token_urlsafe(18)
+    await run_in_threadpool(
+        store.coordinator.put,
+        f"{PENDING_SLOT}:{pending_id}",
+        json.dumps({"address": address, "login": login}),
+        NONCE_TTL,
+    )
+    return RedirectResponse(
+        f"{settings.public_url.rstrip('/')}/account?github=pending&id={pending_id}", 303
+    )
+
+
+@router.get("/github/pending/{pending_id}", response_model=GitHubPendingOut)
+async def github_pending(
+    pending_id: str, account: Account | None = SIGNED_IN
+) -> GitHubPendingOut:
+    """What GitHub said, for the wallet that asked to install, so it can be shown."""
+    if account is None:
+        raise HTTPException(status_code=401, detail="sign in first")
+    held = await _pending_login(pending_id, account.address)
+    return GitHubPendingOut(login=held["login"])
+
+
+@router.post("/github/confirm/{pending_id}", response_model=Account)
+async def github_confirm(
+    pending_id: str, account: Account | None = SIGNED_IN
+) -> Account:
+    """Bind the login GitHub reported to the wallet that asked to install.
+
+    A person confirming the login they can see is what stands in for the state the
+    install flow does not return; without it, anyone could hand a signed-in wallet a
+    callback URL carrying their own code and be linked to it.
+    """
+    if account is None:
+        raise HTTPException(status_code=401, detail="sign in first")
+    held = await _pending_login(pending_id, account.address)
+    try:
+        linked = await run_in_threadpool(store.link_github, account.address, held["login"])
+    except AccountConflict as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    await run_in_threadpool(store.coordinator.delete, f"{PENDING_SLOT}:{pending_id}")
+    return linked
 
 
 @router.post("/github/simulate", response_model=Account)

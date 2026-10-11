@@ -489,6 +489,108 @@ class TestTheLinkCannotBeHijacked:
         assert r.status_code == 401
 
 
+class TestWhenGitHubInstallsWithoutReturningTheState:
+    """Installing can authorize as it goes, and GitHub is not documented to hand back
+    the state our install link carries.
+
+    Linking on that would be the same hole as the hijack above, so the login is held
+    and the wallet that was offered the install confirms it. Both new rules are here:
+    only a wallet we showed the install link can confirm anything, and confirming is
+    what binds the login.
+    """
+
+    def _oauth(self, monkeypatch: pytest.MonkeyPatch, login: str) -> None:
+        def github(request: httpx.Request) -> httpx.Response:
+            if request.url.path == "/login/oauth/access_token":
+                return httpx.Response(200, json={"access_token": "gho_once"})
+            return httpx.Response(200, json={"login": login})
+
+        client = GitHubOAuth("c", "s", transport=httpx.MockTransport(github))
+        monkeypatch.setattr(auth_routes, "oauth", lambda: client)
+
+    def _offered_the_install(
+        self, client: TestClient, seed: int, monkeypatch: pytest.MonkeyPatch
+    ) -> str:
+        # The install link is only handed out when the App has a slug to build it from.
+        monkeypatch.setattr(settings, "github_app_slug", "misthos-dev")
+        sign_in(client, Wallet(seed))
+        party = client.post(f"{API}/auth/role", json={"role": "publisher", "name": "acme"}).json()[
+            "party_id"
+        ]
+        client.get(f"{API}/publishers/{party}/repositories")  # hands out the install link
+        return party
+
+    def test_an_install_callback_holds_the_login_instead_of_linking_it(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._oauth(monkeypatch, "ada-dev")
+        client = TestClient(app)
+        self._offered_the_install(client, 41, monkeypatch)
+
+        r = client.get(
+            f"{API}/auth/github/callback", params={"code": "c0de"}, follow_redirects=False
+        )
+
+        assert r.status_code == 303
+        assert "/account?github=pending&id=" in r.headers["location"]
+        # Nothing is linked until someone confirms it.
+        assert client.get(f"{API}/auth/me").json()["account"]["github_login"] is None
+
+    def test_confirming_the_held_login_links_it_and_spends_the_hold(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._oauth(monkeypatch, "ada-dev")
+        client = TestClient(app)
+        self._offered_the_install(client, 42, monkeypatch)
+        location = client.get(
+            f"{API}/auth/github/callback", params={"code": "c0de"}, follow_redirects=False
+        ).headers["location"]
+        pending = parse_qs(urlsplit(location).query)["id"][0]
+
+        shown = client.get(f"{API}/auth/github/pending/{pending}")
+        assert shown.status_code == 200 and shown.json()["login"] == "ada-dev"
+
+        confirmed = client.post(f"{API}/auth/github/confirm/{pending}")
+        assert confirmed.status_code == 200
+        assert confirmed.json()["github_login"] == "ada-dev"
+        # Spent: a second confirm finds nothing to bind.
+        assert client.post(f"{API}/auth/github/confirm/{pending}").status_code == 404
+
+    def test_another_wallet_cannot_see_or_confirm_the_hold(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        self._oauth(monkeypatch, "ada-dev")
+        starter = TestClient(app)
+        self._offered_the_install(starter, 43, monkeypatch)
+        location = starter.get(
+            f"{API}/auth/github/callback", params={"code": "c0de"}, follow_redirects=False
+        ).headers["location"]
+        pending = parse_qs(urlsplit(location).query)["id"][0]
+
+        other = TestClient(app)
+        sign_in(other, Wallet(44))
+        other.post(f"{API}/auth/role", json={"role": "contributor", "name": "mallory"})
+
+        assert other.get(f"{API}/auth/github/pending/{pending}").status_code == 403
+        assert other.post(f"{API}/auth/github/confirm/{pending}").status_code == 403
+        assert other.get(f"{API}/auth/me").json()["account"]["github_login"] is None
+
+    def test_a_callback_nobody_here_started_is_refused(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """No state and no install offered: this is someone else's link, whether it is
+        a leftover install or a URL handed to a signed-in wallet."""
+        self._oauth(monkeypatch, "someone-else")
+        client = TestClient(app)
+        sign_in(client, Wallet(45))
+        client.post(f"{API}/auth/role", json={"role": "contributor", "name": "ada"})
+
+        r = client.get(f"{API}/auth/github/callback", params={"code": "c0de"})
+
+        assert r.status_code == 400
+        assert client.get(f"{API}/auth/me").json()["account"]["github_login"] is None
+
+
 class TestTheApiDoesNotCrashOnChosenInput:
     def test_a_timestamp_without_a_zone_is_a_refused_sign_in_not_a_500(self) -> None:
         client = TestClient(app)

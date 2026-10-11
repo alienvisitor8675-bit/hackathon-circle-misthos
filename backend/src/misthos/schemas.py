@@ -438,6 +438,12 @@ class GitHubLinkStart(BaseModel):
     authorize_url: str
 
 
+class GitHubPendingOut(BaseModel):
+    """The login GitHub reported during an install, waiting to be confirmed."""
+
+    login: str
+
+
 class AlreadyPublished(BaseModel):
     """The answer to publishing a GitHub issue that already has an open listing (#120)."""
 

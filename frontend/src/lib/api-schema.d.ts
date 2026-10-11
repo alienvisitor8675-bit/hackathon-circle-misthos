@@ -118,6 +118,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/auth/github/pending/{pending_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Github Pending
+         * @description What GitHub said, for the wallet that asked to install, so it can be shown.
+         */
+        get: operations["github_pending_api_v1_auth_github_pending__pending_id__get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/github/confirm/{pending_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Github Confirm
+         * @description Bind the login GitHub reported to the wallet that asked to install.
+         *
+         *     A person confirming the login they can see is what stands in for the state the
+         *     install flow does not return; without it, anyone could hand a signed-in wallet a
+         *     callback URL carrying their own code and be linked to it.
+         */
+        post: operations["github_confirm_api_v1_auth_github_confirm__pending_id__post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/auth/github/simulate": {
         parameters: {
             query?: never;
@@ -1352,6 +1396,14 @@ export interface components {
             /** Authorize Url */
             authorize_url: string;
         };
+        /**
+         * GitHubPendingOut
+         * @description The login GitHub reported during an install, waiting to be confirmed.
+         */
+        GitHubPendingOut: {
+            /** Login */
+            login: string;
+        };
         /** HTTPValidationError */
         HTTPValidationError: {
             /** Detail */
@@ -1710,6 +1762,7 @@ export interface components {
             /**
              * Repo
              * @example acme/ledger
+             * @example https://github.com/acme/ledger/issues/12
              */
             repo: string;
             /** Number */
@@ -2345,6 +2398,68 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+        };
+    };
+    github_pending_api_v1_auth_github_pending__pending_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pending_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GitHubPendingOut"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    github_confirm_api_v1_auth_github_confirm__pending_id__post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                pending_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Account"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
             };
         };
     };

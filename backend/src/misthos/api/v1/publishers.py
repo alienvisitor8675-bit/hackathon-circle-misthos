@@ -15,7 +15,7 @@ from fastapi import APIRouter, HTTPException, Query, Response
 from fastapi.concurrency import run_in_threadpool
 
 from misthos.api.session import SIGNED_IN, require_owner_or_simulation
-from misthos.api.v1.auth import mint_link_state
+from misthos.api.v1.auth import mint_link_state, record_install_intent
 from misthos.config import settings
 from misthos.domain import plans
 from misthos.domain.policy import PolicyRefusal
@@ -161,7 +161,9 @@ async def repositories(publisher_id: str, account: Account | None = SIGNED_IN) -
             # install authorize as it goes, and GitHub then returns them to the
             # callback with a code -- so carrying this wallet's state means the install
             # finishes the link the same way the OAuth button does, and the callback's
-            # guard covers both.
+            # guard covers both. `record_install_intent` is what lets a callback that
+            # arrives without that state be told from one nobody started here.
+            await record_install_intent(account.address)
             install_url += f"?state={await mint_link_state(account.address)}"
     return RepositoriesOut(
         repositories=await run_in_threadpool(store.connections_of, publisher_id),
