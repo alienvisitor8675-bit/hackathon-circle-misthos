@@ -193,7 +193,7 @@ function Repositories({ publisherId, linked }: { publisherId: string; linked: bo
         <p className="dim" style={{ marginBottom: 12 }}>
           {linked
             ? 'No repositories yet. Install the Misthos GitHub App on one, signed in to GitHub as the account you linked.'
-            : 'Install the Misthos GitHub App on a repository and you are set: installing also links your GitHub account, so there is no separate sign-in step.'}
+            : 'Nothing connected yet. Install the Misthos GitHub App, or link your GitHub account above if you already have — the repositories it covers then appear here.'}
         </p>
       )}
       <p className="stat-hint">
