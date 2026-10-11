@@ -154,6 +154,24 @@ async def choose_role(payload: RoleRequest, request: Request) -> Account:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 
+LINK_SLOT = "gh-link"
+"""Where a link's state is kept between starting it and GitHub returning it."""
+
+
+async def mint_link_state(address: str) -> str:
+    """A single-use state for a GitHub link, whichever flow finishes it.
+
+    Two flows end at the same callback, and both need the state to prove the person
+    finishing the link is the one who started it: the OAuth button, which authorizes
+    and links in one trip, and the install link, which can authorize the same way
+    while installing (see `repositories` in `publishers`). GitHub hands the state back,
+    so one guard covers both and neither can be finished by another wallet.
+    """
+    state = secrets.token_urlsafe(24)
+    await run_in_threadpool(store.coordinator.put, f"{LINK_SLOT}:{state}", address, NONCE_TTL)
+    return state
+
+
 @router.post(
     "/github/start",
     response_model=GitHubLinkStart,
@@ -183,8 +201,7 @@ async def start_github_link(
             detail=f"GitHub sends you back to {public}, and this browser is on {origin}; "
             f"open the app at {public} and link from there",
         )
-    state = secrets.token_urlsafe(24)
-    await run_in_threadpool(store.coordinator.put, f"gh-link:{state}", account.address, NONCE_TTL)
+    state = await mint_link_state(account.address)
     return GitHubLinkStart(authorize_url=client.authorize_url(state, callback_url()))
 
 
@@ -205,7 +222,7 @@ async def github_callback(
     address = await signed_in_address(request)
     if address is None:
         raise HTTPException(status_code=401, detail="sign in to finish linking GitHub")
-    slot = f"gh-link:{state}"
+    slot = f"{LINK_SLOT}:{state}"
     started_by = await run_in_threadpool(store.coordinator.get, slot)
     if started_by is None:
         raise HTTPException(status_code=400, detail="the link request is unknown or expired")

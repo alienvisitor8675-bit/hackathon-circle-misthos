@@ -382,3 +382,31 @@ class TestThePublishersView:
         assert [r["repo"] for r in body["repositories"]] == ["acme/gears", REPO]
         assert body["label"] == "misthos"
         assert body["install_url"] == "https://github.com/apps/misthos-dev/installations/new"
+
+    def test_a_signed_in_install_link_carries_the_state_that_finishes_the_link(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Installing can be the only GitHub action a person takes.
+
+        With the App authorizing during installation, GitHub returns them to the
+        callback that already exists, so the state has to be on the install link for
+        that callback to accept it -- and it names the wallet that started it, which is
+        what stops a second wallet finishing the link.
+        """
+        monkeypatch.setattr(settings, "github_app_slug", "misthos-dev")
+        client = TestClient(app)
+        wallet = Wallet(901)
+        nonce = client.post(f"{API}/auth/nonce").json()["nonce"]
+        message = wallet.message(nonce)
+        client.post(
+            f"{API}/auth/verify", json={"message": message, "signature": wallet.sign(message)}
+        )
+        publisher = client.post(
+            f"{API}/auth/role", json={"role": "publisher", "name": "acme-maint"}
+        ).json()["party_id"]
+
+        install = client.get(f"{API}/publishers/{publisher}/repositories").json()["install_url"]
+        assert install.startswith("https://github.com/apps/misthos-dev/installations/new?state=")
+
+        state = install.split("state=", 1)[1]
+        assert store.coordinator.get(f"gh-link:{state}") == wallet.address.lower()
