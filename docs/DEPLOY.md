@@ -184,9 +184,17 @@ is real, or settle on Arc testnet as section 3 describes.
    ```
 
    For real account linking, also set `MISTHOS_GITHUB_OAUTH_CLIENT_ID` and
-   `MISTHOS_GITHUB_OAUTH_CLIENT_SECRET` from an OAuth App with the callback
-   `http://localhost:5173/api/v1/auth/github/callback`. In the simulation, linking
-   by login works too.
+   `MISTHOS_GITHUB_OAUTH_CLIENT_SECRET`. These are the App's own **Client ID** and
+   **Client secrets** from the same settings page, so no separate OAuth App is
+   needed; the callback is `http://localhost:5173/api/v1/auth/github/callback` (and
+   the deployment's own `https://<host>/api/v1/auth/github/callback`). In the
+   simulation, linking by login works too.
+
+   An OAuth App is not a substitute for the App itself. It can only identify who
+   someone is — the token this flow returns is read once for the login and dropped —
+   and GitHub delivers webhooks to Apps alone, so a repository's `issues`,
+   `issue_comment`, `pull_request` and `check_run` events, which is the whole loop,
+   would never arrive.
 
 4. **The publisher:**
    - Signs in at http://localhost:5173/account, chooses publisher, and links the
