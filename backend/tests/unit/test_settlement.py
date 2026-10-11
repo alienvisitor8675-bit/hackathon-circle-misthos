@@ -155,6 +155,7 @@ class TestCommit:
         escrow = self.escrow(
             {
                 commitments_call("ISS-1"): HELD_180,
+                "eth_blockNumber": hex(9),
                 "eth_getLogs": [{"topics": ["0x", issue_key("ISS-1")], "transactionHash": "0xC0"}],
             }
         )

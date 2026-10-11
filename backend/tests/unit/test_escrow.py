@@ -173,6 +173,7 @@ class TestArcEscrow:
         ]
         answers = {
             "eth_getCode": "0x6080",
+            "eth_blockNumber": hex(100),
             "eth_getLogs": logs,
             commitments_call("ISS-1001"): HELD_180,
             "0x839df945" + stranger[2:]: HELD_180,
@@ -182,6 +183,35 @@ class TestArcEscrow:
         )
         found = escrow.commitments()
         assert set(found) == {"ISS-1001", stranger}
+
+    def test_a_log_scan_is_walked_in_windows_the_node_accepts(self) -> None:
+        """Arc refuses an `eth_getLogs` wider than 100,000 blocks.
+
+        Asking once from the deploy block to the head worked only while the chain was
+        young; past the cap the RPC refused it, which failed the whole reconcile and
+        with it every sweep, so no claim expired and no refund was ever made.
+        """
+        first = 1_000_000
+        head = first + 3 * ArcEscrow.LOG_RANGE_BLOCKS + 7
+        seen: list[dict] = []
+        transport = _rpc(
+            {"eth_getCode": "0x6080", "eth_getLogs": [], "eth_blockNumber": hex(head)}, seen
+        )
+        deployed = EscrowDeployment("0xE5C", 5042002, "record", deployed_at_block=first)
+
+        ArcEscrow("http://rpc", deployed, transport=transport).commitments()
+
+        ranges = [b["params"][0] for b in seen if b["method"] == "eth_getLogs"]
+        assert len(ranges) == 4
+        for window in ranges:
+            width = int(window["toBlock"], 16) - int(window["fromBlock"], 16) + 1
+            assert width <= ArcEscrow.LOG_RANGE_BLOCKS
+        # The windows tile the range exactly: no gap to miss a commitment in, no
+        # overlap to read one twice.
+        assert int(ranges[0]["fromBlock"], 16) == first
+        assert int(ranges[-1]["toBlock"], 16) == head
+        for before, after in zip(ranges, ranges[1:], strict=False):
+            assert int(after["fromBlock"], 16) == int(before["toBlock"], 16) + 1
 
     def test_nothing_is_signed_without_a_configured_key(self) -> None:
         escrow = ArcEscrow("http://rpc", DEPLOYED, transport=_rpc({}))

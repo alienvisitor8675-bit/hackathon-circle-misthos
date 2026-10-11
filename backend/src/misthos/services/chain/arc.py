@@ -55,6 +55,15 @@ __all__ = ["ArcEscrow", "ChainUnavailable"]
 class ArcEscrow:
     name = "arc"
 
+    # A node caps how wide one `eth_getLogs` may be, and Arc refuses anything past
+    # 100,000 blocks: "request exceeded max allowed range". Asking once from the
+    # deploy block to the head therefore worked only while the chain was young, and
+    # then every reconcile failed for good -- the sweeper retried every minute and
+    # never succeeded, so no claim expired, no deadline refunded and no silent
+    # publisher was ever released. The range is walked in windows instead, sized
+    # under that cap.
+    LOG_RANGE_BLOCKS = 50_000
+
     def __init__(
         self,
         rpc_url: str,
@@ -205,18 +214,27 @@ class ArcEscrow:
         topics: list[str] = [COMMITTED_TOPIC]
         if key is not None:
             topics.append(key)
-        logs = self._rpc(
-            "eth_getLogs",
-            [
-                {
-                    "address": self.address,
-                    "fromBlock": hex(self.deployment.deployed_at_block or 0),
-                    "toBlock": "latest",
-                    "topics": topics,
-                }
-            ],
-        )
-        return list(logs) if isinstance(logs, list) else []
+        first = self.deployment.deployed_at_block or 0
+        head = int(self._rpc("eth_blockNumber", []), 16)
+        found: list[dict] = []
+        start = first
+        while start <= head:
+            end = min(start + self.LOG_RANGE_BLOCKS - 1, head)
+            logs = self._rpc(
+                "eth_getLogs",
+                [
+                    {
+                        "address": self.address,
+                        "fromBlock": hex(start),
+                        "toBlock": hex(end),
+                        "topics": topics,
+                    }
+                ],
+            )
+            if isinstance(logs, list):
+                found.extend(logs)
+            start = end + 1
+        return found
 
     def _commit_tx(self, issue_id: str) -> str:
         logs = self._committed_logs(issue_key(issue_id))
