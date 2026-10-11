@@ -17,6 +17,10 @@ class GitHubError(Exception):
     """GitHub refused or failed a call."""
 
 
+class GitHubNotConfigured(RuntimeError):
+    """A live App was configured without what its deliveries need to be trusted."""
+
+
 @dataclass(frozen=True)
 class PullRequest:
     repo: str
