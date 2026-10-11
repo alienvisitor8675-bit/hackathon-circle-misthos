@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { api, money, relativeTime, unwrap, type Decision, type IssueSummaryOut, type MetricsOut } from '../lib/client'
 import { Bar, Panel, Stat, StateBadge } from '../components/ui'
+import { useHealth } from '../lib/session'
 
 export default function Dashboard() {
   const qc = useQueryClient()
@@ -19,7 +20,12 @@ export default function Dashboard() {
     queryFn: async () => (await api.GET('/api/v1/issues')).data as IssueSummaryOut[] | undefined,
   })
 
-  // Refused with a reason where a database is configured and reset is not allowed.
+  const health = useHealth()
+  // Reset deletes every row, and it is refused wherever a database is configured, so it
+  // belongs to the simulation alone: on a live deployment there is nothing to reset and
+  // the button only offers a refusal.
+  const simulated = health.data?.simulated ?? false
+
   const reset = useMutation({
     mutationFn: async () => unwrap(await api.POST('/api/v1/demo/reset')),
     onSuccess: () => qc.invalidateQueries(),
@@ -41,18 +47,25 @@ export default function Dashboard() {
             work is accepted.
           </p>
         </div>
-        <div className="btn-row">
-          <button className="btn" onClick={() => reset.mutate()} disabled={reset.isPending}>
-            {reset.isPending ? 'Resetting…' : 'Reset simulation'}
-          </button>
-        </div>
+        {simulated && (
+          <div className="btn-row">
+            <button className="btn" onClick={() => reset.mutate()} disabled={reset.isPending}>
+              {reset.isPending ? 'Resetting…' : 'Reset simulation'}
+            </button>
+          </div>
+        )}
       </div>
-      {reset.error && <div className="error-box form-error">{reset.error.message}</div>}
+      {simulated && reset.error && (
+        <div className="error-box form-error">{reset.error.message}</div>
+      )}
 
       <div className="banner">
-        Simulated build. The lifecycle, the pricing engine, the review agent and the
-        decision log are real code; the money is fake and no chain is contacted. GitHub
-        is simulated until a GitHub App is configured.
+        {simulated
+          ? 'Simulated build. The lifecycle, the pricing engine, the review agent and the decision log are real code; the money is fake and no chain is contacted.'
+          : `Live on ${health.data?.network_label ?? 'chain'}. ${health.data?.money_note ?? ''} The escrow holds the money on chain, and the review agent and the decision log are its record.`}{' '}
+        {health.data?.github_oauth
+          ? 'GitHub is connected through the App.'
+          : 'GitHub is simulated until a GitHub App is configured.'}
       </div>
 
       <div className="hero">
