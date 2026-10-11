@@ -51,6 +51,11 @@ export default defineConfig({
         // send every verdict to the model instead, so the assertions would be racing
         // the network. Blanked here, the way tests/conftest.py blanks it for pytest.
         MISTHOS_ANTHROPIC_API_KEY: '',
+        // And no App: with one configured the API reads real repositories and, when a
+        // publish leaves the number empty, opens a real issue on GitHub. A browser test
+        // must never do that, whatever backend/.env says.
+        MISTHOS_GITHUB_APP_ID: '',
+        MISTHOS_GITHUB_APP_PRIVATE_KEY: '',
       },
       reuseExistingServer: !process.env.CI,
       timeout: 120_000,
