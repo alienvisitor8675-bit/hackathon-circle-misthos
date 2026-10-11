@@ -62,7 +62,7 @@ export default function Dashboard() {
       <div className="banner">
         {simulated
           ? 'Simulated build. The lifecycle, the pricing engine, the review agent and the decision log are real code; the money is fake and no chain is contacted.'
-          : `Live on ${health.data?.network_label ?? 'chain'}. ${health.data?.money_note ?? ''} The escrow holds the money on chain, and the review agent and the decision log are its record.`}{' '}
+          : `${health.data?.money_note || `Live on ${health.data?.network_label ?? 'chain'}.`} The escrow holds the money on chain, and the review agent and the decision log are its record.`}{' '}
         {health.data?.github_oauth
           ? 'GitHub is connected through the App.'
           : 'GitHub is simulated until a GitHub App is configured.'}
