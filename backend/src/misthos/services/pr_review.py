@@ -1,17 +1,16 @@
-"""Review every open pull request of this repository nightly, and merge what passes.
+"""Review every open pull request of this repository, and merge what passes.
 
     GH_TOKEN=... ANTHROPIC_API_KEY=... python -m misthos.services.pr_review
     python -m misthos.services.pr_review --dry-run          # judge, post nothing
 
-`.github/workflows/nightly.yml` runs this at 00:00 UTC. It lists every open pull
-request, has the model review each diff against the current `main`, posts the review
-with an explicit decision, and squash-merges the ones it approved.
+It lists every open pull request, has the model review each diff against the current
+`main`, posts the review with an explicit decision, and squash-merges the ones it
+approved.
 
 Why this is a tool and not a page of workflow shell: the part worth getting right is
 the decision — what may be merged and what may not — so it lives here as pure
-functions with tests, and the workflow only runs it. Nothing merges on a
-request-changes verdict, a check that is red or still running, a draft, a conflict, or
-a head that moved after it was reviewed.
+functions with tests. Nothing merges on a request-changes verdict, a check that is red
+or still running, a draft, a conflict, or a head that moved after it was reviewed.
 
 The GitHub side goes through `gh`, which is already how this repository is worked
 interactively: it knows about stacked pull requests and it can use the ruleset bypass

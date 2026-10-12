@@ -226,20 +226,19 @@ is real, or settle on Arc testnet as section 3 describes.
 
 Every step lands in the issue's decision log in the web app.
 
-## 5. The nightly review
+## 5. The pull-request review
 
-`.github/workflows/nightly.yml` runs at 18:00 in `Asia/Ho_Chi_Minh` and reviews every
-open pull request in this repository against `main`. It posts the review with an
-explicit decision — an approving review, or a request for changes — and squash-merges
-the ones it approved, and only those.
+[backend/src/misthos/services/pr_review.py](../backend/src/misthos/services/pr_review.py)
+reviews every open pull request in this repository against `main`, posts the review with
+an explicit decision — an approving review, or a request for changes — and squash-merges
+the ones it approved, and only those. Nothing schedules it: it is run by hand.
 
-The decision is [backend/src/misthos/services/pr_review.py](../backend/src/misthos/services/pr_review.py),
-which is a tool rather than shell written into the workflow so that it can be tested:
-nothing merges on a request-changes verdict, a draft, a conflict, a check that is red or
-still running, or a pull request another reviewer has held back. A pull request it
-cannot review — a diff past the size it reads, an answer it cannot parse — is skipped and
-said so in the run's log, never guessed at. Each run reviews all of them, and one whose
-head has not moved since the last review is only judged for the merge.
+The decision is a tool rather than shell written into a workflow so that it can be
+tested: nothing merges on a request-changes verdict, a draft, a conflict, a check that
+is red or still running, or a pull request another reviewer has held back. A pull
+request it cannot review — a diff past the size it reads, an answer it cannot parse — is
+skipped and said so in the run's log, never guessed at. Each run reviews all of them,
+and one whose head has not moved since the last review is only judged for the merge.
 
 Run it by hand:
 
@@ -249,14 +248,12 @@ mise run pr:review -- --dry-run     # judge and report; post nothing, merge noth
 mise run pr:review -- --only 117    # one pull request
 ```
 
-Two repository secrets. `ANTHROPIC_API_KEY` pays for the model that writes the reviews.
-`NIGHTLY_TOKEN` is optional: the default `GITHUB_TOKEN` can review and merge other
-people's pull requests, but a pull request this repository's owner wrote cannot be
-*approved* by its author, so merging those unattended needs a token whose user may
-bypass the `main` ruleset. Without it they are reviewed, given a verdict in a comment,
-and left for a person to merge.
+`MISTHOS_ANTHROPIC_API_KEY` pays for the model that writes the reviews. `GH_TOKEN` can
+review and merge other people's pull requests, but a pull request this repository's
+owner wrote cannot be *approved* by its author, so merging those needs a token whose
+user may bypass the `main` ruleset. Without it they are reviewed, given a verdict in a
+comment, and left for a person to merge.
 
 The key is spent at `MISTHOS_ANTHROPIC_API_URL`, any Anthropic-compatible endpoint. It
-is unset by default, so the backend's built-in one is used; set the repository variable
-`MISTHOS_ANTHROPIC_API_URL` when the key belongs somewhere else, such as
-`https://api.anthropic.com`.
+is unset by default, so the backend's built-in one is used; set it when the key belongs
+somewhere else, such as `https://api.anthropic.com`.
