@@ -93,18 +93,20 @@ test('a publisher signs in with GitHub, publishes, and connects a wallet to fund
   await page.getByRole('button', { name: 'Continue as a publisher' }).click()
   await expect(page.getByRole('link', { name: 'publisher · acme-gh' })).toBeVisible()
 
-  // Publishing and the price need no wallet.
+  // Publishing and the price need no wallet. The price is named here, on the form
+  // (#142), and it is the amount the escrow is asked to commit later.
   await page.getByRole('link', { name: 'Publish', exact: true }).click()
   await page.getByLabel('Repository').fill('acme/gh-signin')
   await page.getByLabel('Title').fill('Retry idempotently when settlement returns 503')
-  await page.getByRole('button', { name: 'Publish and get a price' }).click()
+  await page.getByLabel('What the work is worth, in USDC').fill('250')
+  await page.getByRole('button', { name: 'Publish at this price' }).click()
   await expect(page).toHaveURL(/\/issues\/ISS-\d+$/)
   const issueUrl = page.url()
   await page.getByRole('button', { name: 'Approve these criteria' }).click()
   await expect(page.getByRole('button', { name: 'Criteria approved' })).toBeVisible()
 
   // Approving the price names the wallet the escrow takes the money from.
-  const fund = page.getByRole('button', { name: /^Approve the price and commit/ })
+  const fund = page.getByRole('button', { name: /^Approve and commit \$250\.00$/ })
   await expect(fund).toBeDisabled()
   await expect(page.getByRole('note')).toContainText(
     'Connect a wallet before approving the price',
