@@ -55,6 +55,7 @@ class _Token:
 
 class GitHubApp:
     name = "github-app"
+    creates_issues = True
 
     def __init__(
         self,
@@ -208,6 +209,19 @@ class GitHubApp:
 
     def comment(self, repo: str, number: int, body: str) -> None:
         self._post(repo, f"/repos/{repo}/issues/{number}/comments", {"body": body})
+
+    def create_issue(self, repo: str, title: str, body: str, labels: list[str]) -> int:
+        """Open the issue, as the installation, and take the number GitHub assigns.
+
+        The number is GitHub's, not ours: it is what the publisher's link, the
+        webhook and every later call agree on.
+        """
+        opened = self._post(
+            repo,
+            f"/repos/{repo}/issues",
+            {"title": title, "body": body, "labels": labels},
+        )
+        return int(opened["number"])
 
     def review(self, repo: str, number: int, head_sha: str, event: ReviewEvent, body: str) -> None:
         self._post(

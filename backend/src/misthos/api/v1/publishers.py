@@ -114,9 +114,11 @@ async def audit(
 
 @router.get("/{publisher_id}/finance", response_model=FinanceOut)
 async def finance(publisher_id: str, account: Account | None = SIGNED_IN) -> FinanceOut:
-    """The declared budget, what the publisher's connected books say, and the lower of
-    the two, which is what caps every price it is offered. Read-only, and the
-    publisher's alone: cash and budgets are commercially sensitive."""
+    """What the publisher's books say, for the publisher alone.
+
+    Read-only, and informational: it no longer caps or refuses a price (#142), so a
+    publisher whose budget is small can still fund whatever they think the work is
+    worth. Cash and budgets are commercially sensitive, so only the publisher sees it."""
     require_owner_or_simulation(account, publisher_id, "see these books")
     try:
         publisher, read, problem = await run_in_threadpool(store.finance_context, publisher_id)
@@ -125,9 +127,9 @@ async def finance(publisher_id: str, account: Account | None = SIGNED_IN) -> Fin
     # Plain decimals, like every other *_usdc string: the stored figure is formatted.
     declared_amount = Decimal(publisher.budget_remaining_usdc.replace(",", ""))
     declared = f"{declared_amount:.2f}"
-    caps = declared
+    spendable = declared
     if read is not None and read.budget_remaining is not None:
-        caps = f"{min(declared_amount, read.budget_remaining.decimal):.2f}"
+        spendable = f"{min(declared_amount, read.budget_remaining.decimal):.2f}"
     return FinanceOut(
         publisher_id=publisher_id,
         declared_budget_usdc=declared,
@@ -138,7 +140,7 @@ async def finance(publisher_id: str, account: Account | None = SIGNED_IN) -> Fin
         else None,
         cash_usdc=f"{read.cash.decimal:.2f}" if read and read.cash is not None else None,
         as_of=read.as_of if read else None,
-        caps_prices_at_usdc=caps,
+        spendable_usdc=spendable,
         note=problem or (read.note if read else ""),
     )
 
@@ -151,8 +153,20 @@ async def repositories(publisher_id: str, account: Account | None = SIGNED_IN) -
     if await run_in_threadpool(store.get_publisher, publisher_id) is None:
         raise HTTPException(status_code=404, detail=f"no publisher {publisher_id}")
     slug = settings.github_app_slug
+    connected = await run_in_threadpool(store.connections_of, publisher_id)
     return RepositoriesOut(
-        repositories=await run_in_threadpool(store.connections_of, publisher_id),
+        repositories=connected,
         label=settings.github_label,
+        # Plain: installing connects repositories for label-driven pricing. It does not
+        # link anyone, so it carries no state and finishes no link.
         install_url=f"https://github.com/apps/{slug}/installations/new" if slug else None,
+        app_name=slug or None,
+        # Once something is connected, adding or removing repositories happens on GitHub's
+        # own page for that installation -- there is no API for it -- so that is what to
+        # point at rather than an install page the App is already on.
+        settings_url=(
+            f"https://github.com/settings/installations/{connected[0].installation_id}"
+            if connected
+            else None
+        ),
     )

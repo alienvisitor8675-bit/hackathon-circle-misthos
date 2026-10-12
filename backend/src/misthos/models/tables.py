@@ -116,13 +116,16 @@ issues = Table(
     Column("payout_checked_at", Timestamp),
     Column("criteria_approved_at", Timestamp),
     Column("relisted_from", Id, ForeignKey("issues.id")),
-    # The terms the publisher approved at the price checkpoint, which booking checks
+    # The terms the publisher approved at the funding checkpoint, which booking checks
     # the commitment against (#126). Null until the price is approved.
     Column("funding_amount_base_units", BigInteger),
     Column("funding_fee_bps", Integer),
     Column("funding_wallet", String(64)),
     Column("funding_deadline", Timestamp),
     Column("funding_approved_at", Timestamp),
+    # What the publisher priced the work at. Null only on issues funded before #142,
+    # which took their amount from the engine's recommendation instead.
+    Column("price_base_units", BigInteger),
     Column("version", Integer, nullable=False),
 )
 

@@ -21,7 +21,7 @@ from misthos.domain.escrow import approve_call, commit_call, issue_key
 from misthos.domain.issue import IllegalTransition, IssueState
 from misthos.domain.money import Usdc
 from misthos.domain.policy import PolicyRefusal
-from misthos.domain.pricing import UnfundableIssue
+from misthos.domain.pricing import PriceRefused
 from misthos.repositories import StaleIssue
 from misthos.schemas import (
     Account,
@@ -35,11 +35,13 @@ from misthos.schemas import (
     DemoPullRequestOut,
     DisputeRequest,
     EscrowReadback,
+    FundRequest,
     HealthOut,
     IssueOut,
     IssueSummaryOut,
     LoopOut,
     MetricsOut,
+    PriceRequest,
     Publisher,
     PublisherListing,
     PublishRequest,
@@ -248,9 +250,11 @@ async def get_escrow(issue_id: str) -> EscrowReadback:
     )
 
 
-async def _act(step: Callable[..., IssueRecord], issue_id: str, *args: object) -> IssueOut:
+async def _act(
+    step: Callable[..., IssueRecord], issue_id: str, *args: object, **kwargs: object
+) -> IssueOut:
     try:
-        rec = await run_in_threadpool(step, issue_id, *args)
+        rec = await run_in_threadpool(step, issue_id, *args, **kwargs)
     except (
         IllegalTransition,
         StaleIssue,
@@ -267,6 +271,10 @@ async def _act(step: Callable[..., IssueRecord], issue_id: str, *args: object) -
         raise _conflict(exc) from exc
     except (ComplianceRefusal, PolicyRefusal, NotSimulated) as exc:
         raise _refused(exc) from exc
+    except PriceRefused as exc:
+        # The request named a price; it is the value in it that cannot be used, which is
+        # what 422 says, rather than the party being refused.
+        raise HTTPException(status_code=422, detail=exc.justification) from exc
     except UntestableCriteria as exc:
         # Shaped like a validation error, so a client shows each reason by its criterion.
         raise HTTPException(
@@ -427,10 +435,15 @@ async def approve_criteria(
 async def fund(
     issue_id: str,
     request: Request,
+    payload: FundRequest | None = None,
     idempotency_key: str | None = IDEMPOTENCY_KEY,
     account: Account | None = SIGNED_IN,
 ) -> Any:
-    """The publisher approves the price, and the money is committed to the escrow.
+    """The publisher approves the price they set, and the money is committed.
+
+    No amount is taken here. The price was named when the issue was published and can
+    be moved with `PATCH /issues/{issue_id}/price` until someone claims it, so a second
+    way to change the number at the moment money moves is a second thing to audit (#142).
 
     The approval names the publisher's funding wallet as the only one the escrow takes
     the commitment from, so a publisher who signed in with GitHub connects a wallet
@@ -442,8 +455,55 @@ async def fund(
         require_github(account, "fund an issue")
     by = _who(account, "the publisher")
     return await idempotent(
-        request, idempotency_key, lambda: _act(store.approve_price, issue_id, by)
+        request,
+        idempotency_key,
+        lambda: _act(store.approve_price, issue_id, by),
     )
+
+
+@router.patch(
+    "/issues/{issue_id}/price",
+    response_model=IssueOut,
+    dependencies=[limit_actions],
+    responses={409: {"description": "An issue past the point where its price can move"}},
+)
+async def set_price(
+    issue_id: str,
+    payload: PriceRequest,
+    request: Request,
+    idempotency_key: str | None = IDEMPOTENCY_KEY,
+    account: Account | None = SIGNED_IN,
+) -> Any:
+    """The publisher names a new price, while nobody is working on the issue.
+
+    Until a claim the price is the publisher's to move: the money is theirs and the
+    issue has not been promised to anyone. A claim is that promise, so it closes the
+    door. This is what replaces the automatic re-listing that used to raise a price
+    nobody claimed on the publisher's behalf (#142).
+    """
+    rec = await _require(issue_id)
+    require_owner_or_simulation(account, rec.publisher_id, "re-price this issue")
+    if account is not None:
+        require_github(account, "re-price an issue")
+    by = _who(account, "the publisher")
+    amount = _amount(payload.amount)
+    return await idempotent(
+        request,
+        idempotency_key,
+        lambda: _act(store.set_price, issue_id, amount, by),
+    )
+
+
+def _amount(text: str) -> Usdc:
+    """A price the publisher typed, as USDC.
+
+    Parsing only. The bounds are the domain's to enforce, so a refusal and the range
+    that would work come from one place (`domain/pricing.check_price`).
+    """
+    try:
+        return Usdc.from_decimal(text.strip().replace(",", ""))
+    except (ArithmeticError, ValueError) as exc:
+        raise HTTPException(status_code=422, detail=f"{text!r} is not an amount in USDC") from exc
 
 
 @router.post(
@@ -605,13 +665,19 @@ async def publish(
         raise HTTPException(status_code=401, detail="sign in to publish an issue")
     if await run_in_threadpool(store.get_publisher, payload.publisher_id) is None:
         raise HTTPException(status_code=400, detail=f"unknown publisher {payload.publisher_id}")
+    if payload.price is None:
+        # The web form always sends one. The GitHub flow lists an issue unpriced on
+        # purpose and names the price later with `/misthos price` (#142).
+        raise HTTPException(
+            status_code=422, detail="name a price: the publisher sets what the work is worth"
+        )
 
     async def run() -> IssueOut:
         try:
             rec = await run_in_threadpool(store.publish, payload)
-        except UnfundableIssue as exc:
-            # Well formed, but the work cannot carry its own review cost. Say why
-            # rather than publish a price the platform loses money on.
+        except PriceRefused as exc:
+            # Well formed, but outside the bounds a price may be published at. This is
+            # the only thing that refuses a price (#142).
             raise HTTPException(status_code=422, detail=exc.justification) from exc
         except UnreadableIssue as exc:
             # The App is not installed there, or the issue does not exist.

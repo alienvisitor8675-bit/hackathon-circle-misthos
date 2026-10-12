@@ -395,7 +395,13 @@ class TestThePublisherConnectsAWalletToFund:
         assert account["address"] is None
 
         published = client.post(
-            f"{API}/issues", json={"repo": "acme/gh", "title": "Retry on 503", "publisher_id": "x"}
+            f"{API}/issues",
+            json={
+                "repo": "acme/gh",
+                "title": "Retry on 503",
+                "publisher_id": "x",
+                "price": "500",
+            },
         )
         assert published.status_code == 201, published.text
         issue = published.json()
@@ -442,7 +448,8 @@ class TestThePublisherConnectsAWalletToFund:
         assert client.get(f"{API}/auth/me").json()["wallet"] is None
 
         issue = client.post(
-            f"{API}/issues", json={"repo": "circle/pub", "title": "Fix it", "publisher_id": pid}
+            f"{API}/issues",
+            json={"repo": "circle/pub", "title": "Fix it", "publisher_id": pid, "price": "500"},
         ).json()
         client.post(f"{API}/issues/{issue['id']}/criteria",
                     json={"criteria": issue["acceptance_criteria"]})  # fmt: skip
@@ -692,13 +699,22 @@ class TestFromGitHubAlone:
         rec = store.find_open(repo, 21)
         assert rec is not None
 
-        def approve() -> str:
+        def comment(body: str) -> str:
             deliver("issue_comment", {
                 "action": "created", "repository": {"full_name": repo}, "issue": {"number": 21},
-                "comment": {"body": "/misthos approve", "user": {"login": "gh-maint"}},
+                "comment": {"body": body, "user": {"login": "gh-maint"}},
                 "sender": {"login": "gh-maint"},
             })  # fmt: skip
             return [m.body for m in github.sent if m.kind == "comment" and m.target == "21"][-1]
+
+        def approve() -> str:
+            return comment("/misthos approve")
+
+        # A GitHub issue arrives unpriced, and nothing is funded until its publisher
+        # names the price (#142).
+        refused = comment("/misthos price 250")
+        assert "priced this at" in refused
+        assert store.get(rec.id).price is not None  # type: ignore[union-attr]
 
         reply = approve()
 

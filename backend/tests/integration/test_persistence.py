@@ -404,7 +404,7 @@ class TestMigrations:
     def test_every_account_is_kept_when_accounts_stop_being_wallets(
         self, database_url: str
     ) -> None:
-        """0015 (#131) keys an account by its party. An account linked to GitHub and a
+        """0016 (#131) keys an account by its party. An account linked to GitHub and a
         wallet-only one, as 0014 held them, both come through and sign in as before;
         the linked one gets its GitHub id at its first GitHub sign-in."""
         from alembic import command

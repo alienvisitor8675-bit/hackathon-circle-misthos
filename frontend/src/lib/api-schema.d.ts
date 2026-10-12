@@ -505,7 +505,11 @@ export interface paths {
         put?: never;
         /**
          * Approve the price and commit the funds
-         * @description The publisher approves the price, and the money is committed to the escrow.
+         * @description The publisher approves the price they set, and the money is committed.
+         *
+         *     No amount is taken here. The price was named when the issue was published and can
+         *     be moved with `PATCH /issues/{issue_id}/price` until someone claims it, so a second
+         *     way to change the number at the moment money moves is a second thing to audit (#142).
          *
          *     The approval names the publisher's funding wallet as the only one the escrow takes
          *     the commitment from, so a publisher who signed in with GitHub connects a wallet
@@ -516,6 +520,31 @@ export interface paths {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/api/v1/issues/{issue_id}/price": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Set Price
+         * @description The publisher names a new price, while nobody is working on the issue.
+         *
+         *     Until a claim the price is the publisher's to move: the money is theirs and the
+         *     issue has not been promised to anyone. A claim is that promise, so it closes the
+         *     door. This is what replaces the automatic re-listing that used to raise a price
+         *     nobody claimed on the publisher's behalf (#142).
+         */
+        patch: operations["set_price_api_v1_issues__issue_id__price_patch"];
         trace?: never;
     };
     "/api/v1/issues/{issue_id}/claim": {
@@ -886,9 +915,11 @@ export interface paths {
         };
         /**
          * Finance
-         * @description The declared budget, what the publisher's connected books say, and the lower of
-         *     the two, which is what caps every price it is offered. Read-only, and the
-         *     publisher's alone: cash and budgets are commercially sensitive.
+         * @description What the publisher's books say, for the publisher alone.
+         *
+         *     Read-only, and informational: it no longer caps or refuses a price (#142), so a
+         *     publisher whose budget is small can still fund whatever they think the work is
+         *     worth. Cash and budgets are commercially sensitive, so only the publisher sees it.
          */
         get: operations["finance_api_v1_publishers__publisher_id__finance_get"];
         put?: never;
@@ -1506,14 +1537,23 @@ export interface components {
             cash_usdc?: string | null;
             /** As Of */
             as_of?: string | null;
-            /** Caps Prices At Usdc */
-            caps_prices_at_usdc: string;
+            /** Spendable Usdc */
+            spendable_usdc: string;
             /**
              * Note
              * @default
              */
             note: string;
         };
+        /**
+         * FundRequest
+         * @description Approving the price the publisher already set.
+         *
+         *     Empty on purpose. An amount here would be a second place to change the number
+         *     after it was published and audited, so the price is set at publish time and moved
+         *     with `PATCH /issues/{issue_id}/price` until someone claims the issue (#142).
+         */
+        FundRequest: Record<string, never>;
         /**
          * GitHubLinkStart
          * @description Where to send the user to approve linking their GitHub account.
@@ -1605,6 +1645,8 @@ export interface components {
             created_at: string;
             /** Deadline */
             deadline?: string | null;
+            /** Price Usdc */
+            price_usdc?: string | null;
             proposal?: components["schemas"]["PriceProposalOut"] | null;
             escrow?: components["schemas"]["EscrowCommitment"] | null;
             claim?: components["schemas"]["Claim"] | null;
@@ -1909,11 +1951,20 @@ export interface components {
             /** Comparables */
             comparables?: components["schemas"]["ComparableOut"][];
         };
+        /**
+         * PriceRequest
+         * @description A new price for an issue nobody has claimed yet.
+         */
+        PriceRequest: {
+            /** Amount */
+            amount: string;
+        };
         /** PublishRequest */
         PublishRequest: {
             /**
              * Repo
              * @example acme/ledger
+             * @example https://github.com/acme/ledger/issues/12
              */
             repo: string;
             /** Number */
@@ -1929,6 +1980,8 @@ export interface components {
             labels?: string[];
             /** Publisher Id */
             publisher_id: string;
+            /** Price */
+            price?: number | string | null;
             /**
              * Compliance Driven
              * @default false
@@ -2031,6 +2084,10 @@ export interface components {
             label: string;
             /** Install Url */
             install_url?: string | null;
+            /** App Name */
+            app_name?: string | null;
+            /** Settings Url */
+            settings_url?: string | null;
         };
         /**
          * ReputationEventOut
@@ -3374,7 +3431,11 @@ export interface operations {
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["FundRequest"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -3400,6 +3461,51 @@ export interface operations {
                 content?: never;
             };
             /** @description The publisher has no wallet to fund from (the detail says to connect one), the criteria are not approved, the issue is not awaiting approval, or the escrow refused */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    set_price_api_v1_issues__issue_id__price_patch: {
+        parameters: {
+            query?: never;
+            header?: {
+                /** @description Any unique string, such as a UUID. Retries with the same key get the first response back for 24 hours instead of running again. */
+                "idempotency-key"?: string | null;
+            };
+            path: {
+                issue_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PriceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IssueOut"];
+                };
+            };
+            /** @description An issue past the point where its price can move */
             409: {
                 headers: {
                     [name: string]: unknown;

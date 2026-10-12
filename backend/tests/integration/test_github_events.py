@@ -13,7 +13,7 @@ from typing import Any
 import pytest
 from fastapi.testclient import TestClient
 
-from misthos.api.v1.webhooks import signature_for
+from misthos.api.v1.webhooks import assert_webhook_secret_is_configured, signature_for
 from misthos.config import settings
 from misthos.domain.issue import IssueState
 from misthos.domain.ledger import MoneyEventKind
@@ -22,7 +22,7 @@ from misthos.domain.signals import IssueFacts, TreeCounts
 from misthos.main import app
 from misthos.models.records import IssueRecord
 from misthos.services.chain import ChainRevert, ChainUnavailable
-from misthos.services.github import SimulatedGitHub
+from misthos.services.github import GitHubNotConfigured, SimulatedGitHub
 from misthos.services.github.events import closed_issues
 from misthos.store import store
 from misthos.workers.sweeper import sweep_once
@@ -455,6 +455,7 @@ class TestReadPath:
                 "number": 777,
                 "title": "ignored",
                 "publisher_id": "PUB-1",
+                "price": "500",
             },
         )
         assert r.status_code == 201, r.text
@@ -473,8 +474,9 @@ class TestReadPath:
         github.put_issue(self.FACTS)
         published = client.post(
             f"{API}/issues",
-            json={"repo": "acme/ledger-core", "number": 777, "title": "x", "publisher_id": "PUB-1"},
-        ).json()
+            json={"repo": "acme/ledger-core", "number": 777, "title": "x",
+                  "publisher_id": "PUB-1", "price": "500"},
+        ).json()  # fmt: skip
         before = published["proposal"]["recommended"]["usdc"]
 
         from dataclasses import replace
@@ -522,8 +524,9 @@ class TestReadPath:
         monkeypatch.setattr(github, "read_issue", refuse)
         r = client.post(
             f"{API}/issues",
-            json={"repo": "acme/private", "number": 5, "title": "x", "publisher_id": "PUB-1"},
-        )
+            json={"repo": "acme/private", "number": 5, "title": "x",
+                  "publisher_id": "PUB-1", "price": "500"},
+        )  # fmt: skip
         assert r.status_code == 422
         assert "could not read acme/private#5" in r.json()["detail"]
 
@@ -604,3 +607,45 @@ class TestReceiver:
     def test_an_event_we_do_not_act_on_is_acknowledged(self, client: TestClient) -> None:
         out = deliver(client, "star", {"action": "created", "repository": {"full_name": "a/b"}})
         assert out["accepted"] and out["handled"] is False
+
+
+class TestStartupGuard:
+    """A live App whose deliveries could never be verified is refused at startup.
+
+    Left at the default secret the receiver answers 503 to every delivery, so the
+    deployment looks configured and does nothing: labelling an issue has no effect
+    and nothing says why. Caught where it can still be fixed instead.
+    """
+
+    def test_a_configured_app_at_the_default_secret_is_refused(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(settings, "github_app_id", "123456")
+        monkeypatch.setattr(settings, "github_app_private_key", "-----BEGIN PRIVATE KEY-----")
+        monkeypatch.setattr(settings, "github_webhook_secret", "dev-secret")
+
+        with pytest.raises(GitHubNotConfigured, match="MISTHOS_GITHUB_WEBHOOK_SECRET"):
+            assert_webhook_secret_is_configured()
+
+    def test_a_configured_app_with_its_own_secret_is_accepted(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(settings, "github_app_id", "123456")
+        monkeypatch.setattr(settings, "github_app_private_key", "-----BEGIN PRIVATE KEY-----")
+        monkeypatch.setattr(settings, "github_webhook_secret", "the-apps-own-secret")
+
+        assert_webhook_secret_is_configured()  # does not raise
+
+    @pytest.mark.parametrize(
+        "app_id,key", [("", ""), ("123456", ""), ("", "-----BEGIN PRIVATE KEY-----")]
+    )
+    def test_half_a_keypair_is_still_the_simulation_and_needs_no_secret(
+        self, monkeypatch: pytest.MonkeyPatch, app_id: str, key: str
+    ) -> None:
+        """`build_github` falls back to the simulation unless both are set, so the
+        guard must key on the same condition rather than on the id alone."""
+        monkeypatch.setattr(settings, "github_app_id", app_id)
+        monkeypatch.setattr(settings, "github_app_private_key", key)
+        monkeypatch.setattr(settings, "github_webhook_secret", "dev-secret")
+
+        assert_webhook_secret_is_configured()  # does not raise

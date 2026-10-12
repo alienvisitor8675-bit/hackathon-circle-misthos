@@ -32,7 +32,7 @@ from fastapi.concurrency import run_in_threadpool
 from misthos.config import settings
 from misthos.repositories import StaleIssue
 from misthos.services.coordination import Busy
-from misthos.services.github import GitHubError, SimulatedGitHub
+from misthos.services.github import GitHubError, GitHubNotConfigured, SimulatedGitHub
 from misthos.services.github.events import HANDLED_EVENTS, Handled, dispatch
 from misthos.store import store
 
@@ -84,6 +84,24 @@ def signatures_are_required() -> bool:
     hand-driven demo deliveries.
     """
     return store.github.name != SIMULATED_GATEWAY
+
+
+def assert_webhook_secret_is_configured() -> None:
+    """Refuse to start a live App whose deliveries could never be verified.
+
+    A configured App makes GitHub the only legitimate sender, so every delivery has
+    to carry a signature this deployment can check. Left at the default secret, the
+    receiver answers 503 to each one and the first symptom is that labelling an issue
+    does nothing at all. Said at startup, where the operator can still fix it.
+    """
+    if not (settings.github_app_id and settings.github_app_private_key):
+        return  # GitHub is simulated: nothing signs deliveries, and none is expected
+    if settings.github_webhook_secret == DEV_SECRET:
+        raise GitHubNotConfigured(
+            "a GitHub App is configured but MISTHOS_GITHUB_WEBHOOK_SECRET is still the "
+            "default, so every delivery would be refused with 503; set it to the "
+            "secret the App's webhook is configured with"
+        )
 
 
 @router.post("/github", status_code=status.HTTP_202_ACCEPTED)

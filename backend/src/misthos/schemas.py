@@ -8,11 +8,13 @@ which view it is looking at.
 from __future__ import annotations
 
 from datetime import datetime
+from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from misthos.domain.money import Usdc
+from misthos.domain.repo import parse_repo_link
 
 Tier = Literal["open", "team", "enterprise"]
 Actor = Literal["agent", "publisher", "contributor", "system"]
@@ -288,6 +290,9 @@ class IssueOut(BaseModel):
     publisher_name: str
     created_at: datetime
     deadline: datetime | None = None
+    price_usdc: str | None = None
+    """What the publisher said the work is worth, and what the escrow commits (#142).
+    Null on an issue published before #142, whose amount came from the recommendation."""
     proposal: PriceProposalOut | None = None
     escrow: EscrowCommitment | None = None
     claim: Claim | None = None
@@ -295,9 +300,9 @@ class IssueOut(BaseModel):
     review: Review | None = None
     contributor_id: str | None = None
     paid_usdc: str | None = None
-    """What the contributor received: the commitment less the platform's take rate."""
+    """What the contributor received: the commitment less the platform's fee."""
     platform_fee_usdc: str | None = None
-    """The platform's commission on this settlement, at the publisher's tier rate."""
+    """The platform's commission on this settlement: 10 percent of the commitment."""
     github_url: str
     criteria_approved_at: datetime | None = None
     """When the publisher approved the acceptance criteria; funding waits for it (#21)."""
@@ -371,14 +376,42 @@ class TimelineEntry(BaseModel):
 
 
 class PublishRequest(BaseModel):
-    repo: str = Field(examples=["acme/ledger"])
+    repo: str = Field(examples=["acme/ledger", "https://github.com/acme/ledger/issues/12"])
+    """`owner/name`, or a link to the repository or the issue, which is read for both."""
     number: int | None = None
     title: str
     summary: str = ""
     labels: list[str] = Field(default_factory=list)
     publisher_id: str
+    price: Decimal | None = None
+    """USDC, as the publisher types it. Their number, and the amount the escrow
+    commits: the engine's suggestion is advice beside it, never a bound (#142).
+
+    Optional because the GitHub flow has no form: an issue listed by a `/misthos`
+    label arrives unpriced, the publisher names the price with `/misthos price`, and
+    funding is refused until they do. The web form always sends one."""
     compliance_driven: bool = False
     signals: dict[str, float] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def _name_the_repository(self) -> PublishRequest:
+        """Read a pasted GitHub link as the `owner/name` the rest of the app matches.
+
+        Connections, webhooks and the loop all compare the `owner/name` GitHub
+        reports, so a link has to arrive as that or nothing would ever match it. A
+        link also carries the issue number, which stands in when none was typed.
+
+        Anything that is not a link is left exactly as the publisher wrote it. The
+        repository is their own words, and the CSV export is what makes those safe to
+        open in a spreadsheet — not this field (see
+        `tests/integration/test_compliance_at_payout.py`).
+        """
+        repo, number = parse_repo_link(self.repo)
+        if repo:
+            self.repo = repo
+            if self.number is None and number is not None:
+                self.number = number
+        return self
 
 
 Role = Literal["publisher", "contributor"]
@@ -465,6 +498,22 @@ class RoleRequest(BaseModel):
     """A publisher's declared budget, which caps every price it is offered."""
 
 
+class FundRequest(BaseModel):
+    """Approving the price the publisher already set.
+
+    Empty on purpose. An amount here would be a second place to change the number
+    after it was published and audited, so the price is set at publish time and moved
+    with `PATCH /issues/{issue_id}/price` until someone claims the issue (#142).
+    """
+
+
+class PriceRequest(BaseModel):
+    """A new price for an issue nobody has claimed yet."""
+
+    amount: str
+    """USDC, as decimal text. Checked against the platform's bounds and nothing else."""
+
+
 class GitHubLinkStart(BaseModel):
     """Where to send the user to approve linking their GitHub account."""
 
@@ -530,8 +579,12 @@ class FinanceOut(BaseModel):
     """What the books say remains of the budget this work comes out of."""
     cash_usdc: str | None = None
     as_of: datetime | None = None
-    caps_prices_at_usdc: str
-    """The lower of the declared budget and what the books say remains."""
+    spendable_usdc: str
+    """The lower of the declared budget and what the books say remains.
+
+    Informational only since #142. It used to cap every price the publisher was
+    offered, which made their own money a one-way constraint on their own decision;
+    it now tells them what they have to spend and nothing else."""
     note: str = ""
 
 
@@ -845,3 +898,11 @@ class RepositoriesOut(BaseModel):
     """The label that has an issue priced."""
     install_url: str | None = None
     """Where to install the App on another repository, when its slug is configured."""
+    app_name: str | None = None
+    """The App's name, for labelling the link that manages it."""
+    settings_url: str | None = None
+    """Where to manage the installation that already covers a repository.
+
+    GitHub's per-installation page is the only place a repository is added to or removed
+    from an installation, so once something is connected this is what to offer instead
+    of installing again. None when nothing is connected yet."""

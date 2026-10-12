@@ -33,6 +33,12 @@ class IssueRecord:
     created_at: datetime
     deadline: datetime | None = None
     proposal: PriceProposal | None = None
+    """The engine's advice: an effort estimate, a range and the reasoning (#142). Read
+    by the page and the record. It never bounds the price."""
+    price: Usdc | None = None
+    """What the publisher said the work is worth, in USDC. Named by them and never by
+    the engine, and the amount the escrow commits. Nothing refuses it but the two
+    bounds in `domain/pricing.py`."""
     escrow: EscrowCommitment | None = None
     claim: Claim | None = None
     submission: Submission | None = None
@@ -65,9 +71,11 @@ class IssueRecord:
         return self.paid if self.paid is not None else Usdc(0)
     """When the publisher approved the acceptance criteria. No funding before it (#21)."""
     relisted_from: str | None = None
-    """The issue this one re-lists at a higher band after nobody claimed it."""
+    """Legacy. Issues raised as a higher-priced re-list before #142; nothing writes it
+    now, because an unclaimed issue refunds and the publisher re-prices or publishes
+    again themselves. Kept so the record of an older issue still reads correctly."""
     funding: FundingTerms | None = None
-    """The terms the publisher approved at the price checkpoint: what the escrow was
+    """The terms the publisher approved at the funding checkpoint: what the escrow was
     told and what booking checks the commitment against (#126)."""
     decisions: list[Decision] = field(default_factory=list)
     money_events: list[MoneyEvent] = field(default_factory=list)

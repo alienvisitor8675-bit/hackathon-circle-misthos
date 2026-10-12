@@ -2,13 +2,17 @@ import { useRef, useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
 import { ApiError, api, unwrap } from '../lib/client'
+import { MINIMUM_PRICE, contributorShare, parseAmount, platformFee } from '../lib/fee'
+import { parseRepoLink } from '../lib/repo-link'
 import { useHealth, useMe } from '../lib/session'
 import { Panel } from '../components/ui'
 
 /**
- * A publisher names a GitHub issue and gets a price back. Nothing is committed here:
- * the publisher approves the acceptance criteria and then the price on the issue's
- * page, and only that second approval moves money.
+ * A publisher names a GitHub issue and the price they will pay for it, and gets its
+ * acceptance criteria drafted. Nothing is committed here: the publisher approves the
+ * criteria and then the price on the issue's page, and only that second approval moves
+ * money. The price is theirs to set, and the engine's reading of the issue is offered
+ * beside it as advice (#142).
  */
 export default function Publish() {
   const me = useMe()
@@ -21,7 +25,18 @@ export default function Publish() {
   const [title, setTitle] = useState('')
   const [summary, setSummary] = useState('')
   const [labels, setLabels] = useState('')
+  const [price, setPrice] = useState('')
   const [compliance, setCompliance] = useState(false)
+
+  // What the publisher typed or pasted, read once: the request carries the
+  // `owner/name` the API stores, and the field can say what it understood first.
+  const link = parseRepoLink(repo)
+  // A pasted issue link carries its number, so it stands in when the field is empty.
+  const issueNumber = number.trim() || link.number || ''
+  // The price is the publisher's, so the form is what makes it usable: a number, and
+  // at least the platform's minimum.
+  const named = parseAmount(price)
+  const priced = !Number.isNaN(named) && named >= MINIMUM_PRICE
 
   const account = me.data?.account ?? null
   const ready = account?.role === 'publisher' && Boolean(account.github_login)
@@ -35,14 +50,16 @@ export default function Publish() {
       unwrap(
         await api.POST('/api/v1/issues', {
           body: {
-            repo: repo.trim(),
-            number: number ? Number(number) : null,
+            repo: link.repo,
+            number: issueNumber ? Number(issueNumber) : null,
             title: title.trim(),
             summary: summary.trim(),
             labels: labels
               .split(',')
               .map((l) => l.trim())
               .filter(Boolean),
+            // The publisher's own number, and the amount the escrow commits (#142).
+            price: price.trim(),
             // The API publishes as the signed-in publisher whatever this says.
             publisher_id: account?.party_id ?? '',
             compliance_driven: compliance,
@@ -67,9 +84,10 @@ export default function Publish() {
         <div>
           <h1 className="page-title">Publish an issue</h1>
           <p className="page-sub">
-            Name the GitHub issue you want fixed. The pricing engine reads it and proposes a
-            fixed price with its reasons. You approve the acceptance criteria, then the
-            price, and only then are funds committed.
+            Name the GitHub issue you want fixed and the price you will pay for it. The pricing
+            engine reads the issue and shows you what work of this shape has settled for, which
+            is advice and nothing more: the number you type is the number that binds. You approve
+            the acceptance criteria, then the price, and only then are funds committed.
           </p>
         </div>
       </div>
@@ -105,11 +123,24 @@ export default function Publish() {
                   <input
                     className="input"
                     value={repo}
-                    onChange={(e) => setRepo(e.target.value)}
-                    placeholder="owner/name"
-                    pattern="[A-Za-z0-9_.\-]+/[A-Za-z0-9_.\-]+"
+                    onChange={(e) => {
+                      const next = e.target.value
+                      setRepo(next)
+                      // A pasted issue link carries its number. Fill the field in
+                      // rather than make the publisher read it off the URL.
+                      const found = parseRepoLink(next)
+                      if (found.number && !number) setNumber(found.number)
+                    }}
+                    placeholder="owner/name, or paste a GitHub link"
                     required
                   />
+                  {repo.trim() !== '' && (
+                    <span className={link.repo ? 'field-note' : 'field-note bad'}>
+                      {link.repo
+                        ? `Read as ${link.repo}${link.number ? ` issue ${link.number}` : ''}`
+                        : 'That names no GitHub repository'}
+                    </span>
+                  )}
                 </label>
                 <label className="field">
                   <span>Issue number</span>
@@ -119,11 +150,16 @@ export default function Publish() {
                     onChange={(e) => setNumber(e.target.value)}
                     inputMode="numeric"
                     pattern="[0-9]*"
-                    placeholder={health.data?.simulated ? 'optional' : '123'}
-                    required={!health.data?.simulated}
+                    placeholder={health.data?.simulated ? 'optional' : 'empty opens a new issue'}
                   />
                 </label>
               </div>
+              {!health.data?.simulated && !issueNumber && (
+                <p className="field-note">
+                  Leaving the number empty opens the issue on GitHub with this title and
+                  description, and prices the issue it creates.
+                </p>
+              )}
               <label className="field">
                 <span>Title</span>
                 <input
@@ -152,6 +188,23 @@ export default function Publish() {
                   placeholder="bug, security"
                 />
               </label>
+              <label className="field">
+                <span>What the work is worth, in USDC</span>
+                <input
+                  className="input"
+                  value={price}
+                  onChange={(e) => setPrice(e.target.value)}
+                  inputMode="decimal"
+                  pattern="[0-9]*[.,]?[0-9]*"
+                  placeholder="250"
+                  required
+                />
+                <span className={priced ? 'field-note' : 'field-note bad'}>
+                  {priced
+                    ? `You pay $${named.toFixed(2)}. The contributor receives $${contributorShare(named).toFixed(2)}, and Misthos keeps $${platformFee(named).toFixed(2)} when the work is accepted.`
+                    : `Any amount from $${MINIMUM_PRICE}. You can change it on the issue's page until someone claims it.`}
+                </span>
+              </label>
               <label className="check">
                 <input
                   type="checkbox"
@@ -164,9 +217,9 @@ export default function Publish() {
                 <button
                   className="btn primary"
                   type="submit"
-                  disabled={publish.isPending || !repo.trim() || !title.trim()}
+                  disabled={publish.isPending || !link.repo || !title.trim() || !priced}
                 >
-                  {publish.isPending ? 'Pricing…' : 'Publish and get a price'}
+                  {publish.isPending ? 'Publishing…' : 'Publish at this price'}
                 </button>
               </div>
               {publish.error && (

@@ -11,6 +11,7 @@ from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from misthos.api.router import api_router
 from misthos.api.v1.issues import already_published
+from misthos.api.v1.webhooks import assert_webhook_secret_is_configured
 from misthos.auth import sessions
 from misthos.config import settings
 from misthos.observability import logs
@@ -96,6 +97,9 @@ def create_app() -> FastAPI:
     assert_secrets_are_configured(
         settings.simulated, settings.attestor_secret_ref, settings.owner_secret_ref
     )
+    # A live App whose deliveries could never be verified is a deployment that looks
+    # configured and does nothing, so it is refused where it can still be fixed.
+    assert_webhook_secret_is_configured()
 
     app = FastAPI(
         title=settings.app_name,

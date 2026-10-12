@@ -1,4 +1,4 @@
-"""The nightly pull-request review, judged where it can be judged without GitHub.
+"""The pull-request review, judged where it can be judged without GitHub.
 
 The model call and the `gh` calls are not tested here; what is tested is the part that
 decides, because that is the part where a mistake merges something nobody approved. A

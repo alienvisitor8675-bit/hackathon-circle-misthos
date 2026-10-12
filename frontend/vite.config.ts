@@ -4,6 +4,10 @@ import { nodePolyfills } from 'vite-plugin-node-polyfills'
 
 // The API is proxied so the browser sees a single origin. That keeps cookies and
 // CORS out of the picture entirely.
+// The proxy follows VITE_API_TARGET so a machine whose :8000 is already taken can
+// run the API elsewhere (`VITE_API_TARGET=http://127.0.0.1:8001 mise run dev:web`).
+const apiTarget = process.env.VITE_API_TARGET ?? 'http://127.0.0.1:8000'
+
 export default defineConfig({
   plugins: [
     react(),
@@ -20,12 +24,12 @@ export default defineConfig({
     host: true,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8000',
+        target: apiTarget,
         changeOrigin: true,
       },
       // So the API reference is reachable from the app's own origin.
-      '/docs': { target: 'http://127.0.0.1:8000', changeOrigin: true },
-      '/openapi.json': { target: 'http://127.0.0.1:8000', changeOrigin: true },
+      '/docs': { target: apiTarget, changeOrigin: true },
+      '/openapi.json': { target: apiTarget, changeOrigin: true },
     },
   },
 })

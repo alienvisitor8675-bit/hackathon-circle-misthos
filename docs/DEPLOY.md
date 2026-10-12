@@ -145,18 +145,24 @@ store behind the same `SecretStore` interface. Fund both signers with a little U
 which is Arc's gas. The owner is the deployer unless ownership was transferred; the
 attestor is the address passed as `MISTHOS_ATTESTOR_ADDRESS` at deploy.
 
+The publisher names the price, and it is that price the escrow records as its ceiling. The
+engine's reading of the issue -- an effort estimate, a range and the comparables behind it
+-- is advice on the page and never bounds what may be published; only the platform's $5
+minimum and $100,000 maximum can refuse a number, and the publisher can move it until the
+money is committed.
+
 Funding takes two approvals. The first fixes the terms (the amount, the take rate,
 the publisher's funding wallet and the escrow deadline), records them on the escrow,
 keeps them with the issue, and is refused with `NotCommitted`; the web app then has the
 publisher's wallet send the two calls from `GET /api/v1/issues/{id}/commitment` (the
 USDC allowance, then the commitment, to exactly those terms) and approves again, which
-books the publisher's own transaction after checking it against the same terms. They
-stand for a day while nothing is committed, and once money is committed they are the
-only ones it is booked against, whatever the clock or the publisher's plan say by then.
-The escrow refuses a commitment from any other wallet or to a later deadline. A
-commitment the platform cannot book (another amount, or a deadline more than an hour
-early) goes back to the publisher once the approved deadline has passed. The funding
-wallet is the one the publisher signed in with, or connected on the account page
+books the publisher's own transaction after checking the amount, the wallet and the
+deadline against what was approved. They stand for a day while nothing is committed, and
+once money is committed they are the only ones it is booked against, whatever the clock
+says by then. The escrow refuses a commitment from any other wallet or to a later
+deadline. A commitment the platform cannot book (another amount, or a deadline more than
+an hour early) goes back to the publisher once the approved deadline has passed. The
+funding wallet is the one the publisher signed in with, or connected on the account page
 after signing in with GitHub (#131), and approving waits for it; a Circle wallet they
 set up there is kept beside it, never in its place. The demo seed is not written
 outside the simulation: it would fund made-up issues from made-up wallets.
@@ -218,9 +224,17 @@ is real, or settle on Arc testnet as section 3 describes.
    ```
 
    For real account linking, also set `MISTHOS_GITHUB_OAUTH_CLIENT_ID` and
-   `MISTHOS_GITHUB_OAUTH_CLIENT_SECRET` from an OAuth App with the callback
-   `http://localhost:5173/api/v1/auth/github/callback`. In the simulation, linking
-   by login works too.
+   `MISTHOS_GITHUB_OAUTH_CLIENT_SECRET`. These are the App's own **Client ID** and
+   **Client secrets** from the same settings page, so no separate OAuth App is
+   needed; the callback is `http://localhost:5173/api/v1/auth/github/callback` (and
+   the deployment's own `https://<host>/api/v1/auth/github/callback`). In the
+   simulation, linking by login works too.
+
+   An OAuth App is not a substitute for the App itself. It can only identify who
+   someone is — the token this flow returns is read once for the login and dropped —
+   and GitHub delivers webhooks to Apps alone, so a repository's `issues`,
+   `issue_comment`, `pull_request` and `check_run` events, which is the whole loop,
+   would never arrive.
 
 4. **The publisher:**
    - Signs in at http://localhost:5173/account, chooses publisher, and links the
@@ -229,11 +243,17 @@ is real, or settle on Arc testnet as section 3 describes.
      account page lists it.
 
 5. **On GitHub:**
-   1. Open an issue and add the `misthos` label. The App replies with the price,
-      the band, the reasoning and the drafted criteria.
-   2. The publisher comments `/misthos approve`, or `/misthos criteria` and a list
-      first; both can go in one comment, each on its own line, and they run in
-      order. The App posts the funded price and criteria.
+   1. Open an issue and add the `misthos` label. The App replies with what comparable
+      work settled for, the reasoning and the drafted criteria, and asks the publisher
+      to name the price with `/misthos price 250`. Nothing is funded until they do.
+      Or publish it from the web app instead: **Publish** takes `owner/name` or a
+      pasted GitHub link, a price, and leaving the issue number **empty opens a new
+      issue** in that repository with the title and description. A number the publisher
+      gives is listed without creating anything.
+   2. The publisher comments `/misthos price 250` to name the amount if the web form did
+      not, then `/misthos approve`, or `/misthos criteria` and a list first; all of them
+      can go in one comment, each on its own line, and they run in order. The App posts
+      the funded price and criteria.
    3. The contributor signs in once, links their GitHub account, and comments
       `/misthos claim`.
    4. The contributor opens a pull request that says `Fixes #<n>`. The project's
@@ -244,20 +264,19 @@ is real, or settle on Arc testnet as section 3 describes.
 
 Every step lands in the issue's decision log in the web app.
 
-## 5. The nightly review
+## 5. The pull-request review
 
-`.github/workflows/nightly.yml` runs at 18:00 in `Asia/Ho_Chi_Minh` and reviews every
-open pull request in this repository against `main`. It posts the review with an
-explicit decision — an approving review, or a request for changes — and squash-merges
-the ones it approved, and only those.
+[backend/src/misthos/services/pr_review.py](../backend/src/misthos/services/pr_review.py)
+reviews every open pull request in this repository against `main`, posts the review with
+an explicit decision — an approving review, or a request for changes — and squash-merges
+the ones it approved, and only those. Nothing schedules it: it is run by hand.
 
-The decision is [backend/src/misthos/services/pr_review.py](../backend/src/misthos/services/pr_review.py),
-which is a tool rather than shell written into the workflow so that it can be tested:
-nothing merges on a request-changes verdict, a draft, a conflict, a check that is red or
-still running, or a pull request another reviewer has held back. A pull request it
-cannot review — a diff past the size it reads, an answer it cannot parse — is skipped and
-said so in the run's log, never guessed at. Each run reviews all of them, and one whose
-head has not moved since the last review is only judged for the merge.
+The decision is a tool rather than shell written into a workflow so that it can be
+tested: nothing merges on a request-changes verdict, a draft, a conflict, a check that
+is red or still running, or a pull request another reviewer has held back. A pull
+request it cannot review — a diff past the size it reads, an answer it cannot parse — is
+skipped and said so in the run's log, never guessed at. Each run reviews all of them,
+and one whose head has not moved since the last review is only judged for the merge.
 
 Run it by hand:
 
@@ -267,14 +286,12 @@ mise run pr:review -- --dry-run     # judge and report; post nothing, merge noth
 mise run pr:review -- --only 117    # one pull request
 ```
 
-Two repository secrets. `ANTHROPIC_API_KEY` pays for the model that writes the reviews.
-`NIGHTLY_TOKEN` is optional: the default `GITHUB_TOKEN` can review and merge other
-people's pull requests, but a pull request this repository's owner wrote cannot be
-*approved* by its author, so merging those unattended needs a token whose user may
-bypass the `main` ruleset. Without it they are reviewed, given a verdict in a comment,
-and left for a person to merge.
+`MISTHOS_ANTHROPIC_API_KEY` pays for the model that writes the reviews. `GH_TOKEN` can
+review and merge other people's pull requests, but a pull request this repository's
+owner wrote cannot be *approved* by its author, so merging those needs a token whose
+user may bypass the `main` ruleset. Without it they are reviewed, given a verdict in a
+comment, and left for a person to merge.
 
 The key is spent at `MISTHOS_ANTHROPIC_API_URL`, any Anthropic-compatible endpoint. It
-is unset by default, so the backend's built-in one is used; set the repository variable
-`MISTHOS_ANTHROPIC_API_URL` when the key belongs somewhere else, such as
-`https://api.anthropic.com`.
+is unset by default, so the backend's built-in one is used; set it when the key belongs
+somewhere else, such as `https://api.anthropic.com`.

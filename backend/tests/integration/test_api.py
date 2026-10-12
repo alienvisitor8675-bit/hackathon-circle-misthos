@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
@@ -11,7 +12,7 @@ from siwe_wallet import Wallet
 from misthos.config import settings
 from misthos.domain.issue import ESCROW_TERM, IssueState
 from misthos.domain.money import Usdc
-from misthos.domain.pricing import take_rate_bps
+from misthos.domain.pricing import fee_bps, platform_fee
 from misthos.main import app
 from misthos.repositories import StaleIssue
 from misthos.services.chain import ChainRevert
@@ -165,7 +166,7 @@ class TestEscrowReadback:
 
         assert first == second
         assert first["deadline"] == int(rec.funding.deadline.timestamp())
-        assert first["fee_bps"] == take_rate_bps(publisher.tier)
+        assert first["fee_bps"] == fee_bps()
         assert first["wallet"] == publisher.wallet.address
 
     def test_there_is_no_plan_before_the_price_is_approved(self, client: TestClient) -> None:
@@ -314,13 +315,14 @@ class TestBookingHonoursTheApproval:
     def test_a_plan_change_between_approval_and_booking_books_the_approved_rate(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """A Team purchase or a lapse to Open after the approval used to refuse the
-        booking FeeMismatch for good, the money already in the escrow at the old rate."""
+        """The rate is the platform's flat fee, fixed with the money (#142). A Team
+        purchase or a lapse to Open after the approval used to refuse the booking
+        FeeMismatch for good, the money already in the escrow at the old rate: the plan
+        no longer moves a rate the escrow has already been given."""
         approved_at = self.first_approval(monkeypatch)
         publisher_id = store.get(self.ISSUE).publisher_id  # type: ignore[union-attr]
-        approved_rate = take_rate_bps(store.get_publisher(publisher_id).tier)  # type: ignore[union-attr]
+        approved_rate = fee_bps()
         store.set_contract_plan(publisher_id, "team", approved_at + timedelta(days=30))
-        assert take_rate_bps("team") != approved_rate
 
         booked = store.approve_price(self.ISSUE, "globex", now=approved_at + timedelta(minutes=5))
 
@@ -419,7 +421,12 @@ class TestWallets:
 
         issue = client.post(
             f"{API}/issues",
-            json={"repo": "fernhill/app", "title": "Fix the retry backoff", "publisher_id": pid},
+            json={
+                "repo": "fernhill/app",
+                "title": "Fix the retry backoff",
+                "publisher_id": pid,
+                "price": "500",
+            },
         ).json()
         client.post(
             f"{API}/issues/{issue['id']}/criteria",
@@ -509,24 +516,18 @@ class TestLifecycleThroughTheApi:
         assert "reviewer_id" not in body
         assert "review_fee_paid_usdc" not in body
 
-    def test_a_settlement_records_the_platform_fee_at_the_tier_rate(
-        self, client: TestClient
-    ) -> None:
-        """The take rate is carved out of the commitment, not added to it."""
+    def test_a_settlement_records_the_flat_platform_fee(self, client: TestClient) -> None:
+        """Ten percent of the commitment, carved out rather than added, and the same
+        for every publisher and every plan (#142)."""
         client.post(f"{API}/issues/ISS-1002/complete")
         body = client.get(f"{API}/issues/ISS-1002").json()
         assert body["state"] == "PAID"
 
-        tier = next(
-            p["tier"]
-            for p in client.get(f"{API}/publishers").json()
-            if p["id"] == body["publisher_id"]
-        )
         gross = body["escrow"]["amount"]["base_units"]
         fee = Usdc.from_decimal(body["platform_fee_usdc"])
         payout = Usdc.from_decimal(body["paid_usdc"])
 
-        assert fee.base_units == gross * take_rate_bps(tier) // 10_000
+        assert fee == platform_fee(Usdc(gross))
         assert payout.base_units + fee.base_units == gross
 
     def test_advancing_a_finished_issue_is_conflict(self, client: TestClient) -> None:
@@ -644,10 +645,20 @@ class TestPublish:
                 "title": "Add a health endpoint",
                 "publisher_id": "PUB-1",
                 "labels": ["feature"],
+                "price": "500",
             },
         ).json()
         assert body["state"] == "AWAITING_APPROVAL"
+        assert Decimal(str(body["price_usdc"])) == Decimal("500")
         assert float(body["proposal"]["recommended"]["usdc"]) > 0
+
+    def test_publishing_without_a_price_is_refused(self, client: TestClient) -> None:
+        r = client.post(
+            f"{API}/issues",
+            json={"repo": "a/b", "title": "x", "publisher_id": "PUB-1"},
+        )
+        assert r.status_code == 422
+        assert "name a price" in r.json()["detail"]
 
     def test_unknown_publisher_is_rejected(self, client: TestClient) -> None:
         r = client.post(
@@ -656,10 +667,11 @@ class TestPublish:
         )
         assert r.status_code == 400
 
-    def test_publishing_beyond_the_budget_is_refused_with_a_reason(
+    def test_a_price_the_publisher_chose_is_accepted_whatever_the_budget_says(
         self, client: TestClient
     ) -> None:
-        """A budget under the price floor cannot carry its own review cost."""
+        """The budget is advice on the page, not a cap: a price the buyer chose is
+        publishable, and only a missing or out-of-bounds price is refused (#142)."""
         publisher = store.get_publisher("PUB-3")
         assert publisher is not None
         publisher.budget_remaining_usdc = "40.00"
@@ -670,6 +682,7 @@ class TestPublish:
                 "repo": "acme/ledger-core",
                 "title": "Rewrite the rounding path",
                 "publisher_id": "PUB-3",
+                "price": "2000",
                 "signals": {
                     "code_surface": 5.0,
                     "requirement_clarity": 5.0,
@@ -680,17 +693,99 @@ class TestPublish:
                 },
             },
         )
-        assert r.status_code == 422
-        assert "minimum" in r.json()["detail"]
+        assert r.status_code == 201, r.text
+        assert Decimal(str(r.json()["price_usdc"])) == Decimal("2000")
 
     def test_a_published_issue_reports_whether_it_is_fundable(
         self, client: TestClient
     ) -> None:
         body = client.post(
             f"{API}/issues",
-            json={"repo": "a/b", "title": "Add a health endpoint", "publisher_id": "PUB-1"},
+            json={
+                "repo": "a/b",
+                "title": "Add a health endpoint",
+                "publisher_id": "PUB-1",
+                "price": "500",
+            },
         ).json()
         assert body["proposal"]["fundable"] is True
+
+
+class TestThePublisherNamesThePrice:
+    """The price is set at publish time and moved with `PATCH /issues/{id}/price` until
+    someone claims the issue. Funding commits the price that is set then, and nothing
+    else: there is no amount at fund time and no band to price inside (#142)."""
+
+    def _awaiting(self, client: TestClient) -> str:
+        rows = client.get(f"{API}/issues", params={"state": "awaiting_approval"}).json()
+        assert rows, "the seed has no issue awaiting approval"
+        issue_id = rows[0]["id"]
+        issue = client.get(f"{API}/issues/{issue_id}").json()
+        approved = client.post(
+            f"{API}/issues/{issue_id}/criteria", json={"criteria": issue["acceptance_criteria"]}
+        )
+        assert approved.status_code == 200, approved.text
+        return issue_id
+
+    def test_the_price_set_at_publish_time_is_the_one_committed(self, client: TestClient) -> None:
+        issue_id = self._awaiting(client)
+        before = client.get(f"{API}/issues/{issue_id}").json()["price_usdc"]
+
+        funded = client.post(f"{API}/issues/{issue_id}/fund")
+
+        assert funded.status_code == 200, funded.text
+        assert funded.json()["escrow"]["amount"]["usdc"] == before
+        readback = client.get(f"{API}/issues/{issue_id}/escrow").json()
+        assert readback["escrow_ceiling"]["usdc"] == before
+
+    def test_a_new_price_before_a_claim_is_the_one_committed(self, client: TestClient) -> None:
+        issue_id = self._awaiting(client)
+        moved = client.patch(f"{API}/issues/{issue_id}/price", json={"amount": "250"})
+        assert moved.status_code == 200, moved.text
+        assert moved.json()["price_usdc"] == "250.00"
+
+        funded = client.post(f"{API}/issues/{issue_id}/fund")
+        assert funded.status_code == 200, funded.text
+        assert funded.json()["escrow"]["amount"]["usdc"] == "250.00"
+
+    def test_an_amount_at_fund_time_is_ignored(self, client: TestClient) -> None:
+        issue_id = self._awaiting(client)
+        priced = client.get(f"{API}/issues/{issue_id}").json()["price_usdc"]
+        funded = client.post(f"{API}/issues/{issue_id}/fund", json={"amount": "1"})
+        assert funded.status_code == 200, funded.text
+        assert funded.json()["escrow"]["amount"]["usdc"] == priced
+
+    def test_a_price_outside_the_bounds_is_refused_with_the_bounds(
+        self, client: TestClient
+    ) -> None:
+        issue_id = self._awaiting(client)
+        r = client.patch(f"{API}/issues/{issue_id}/price", json={"amount": "1"})
+        assert r.status_code == 422, r.text
+        assert "5.00 USDC" in r.json()["detail"] and "100000.00 USDC" in r.json()["detail"]
+        # Refused, so nothing moved and the issue still waits.
+        assert client.get(f"{API}/issues/{issue_id}").json()["state"] == "AWAITING_APPROVAL"
+
+    def test_a_price_cannot_move_once_money_is_committed(self, client: TestClient) -> None:
+        funded_id = client.get(f"{API}/issues", params={"state": "funded"}).json()[0]["id"]
+        r = client.patch(f"{API}/issues/{funded_id}/price", json={"amount": "250"})
+        assert r.status_code == 409
+
+    def test_something_that_is_not_an_amount_is_refused(self, client: TestClient) -> None:
+        issue_id = self._awaiting(client)
+        r = client.patch(f"{API}/issues/{issue_id}/price", json={"amount": "about a grand"})
+        assert r.status_code == 422
+        assert "not an amount in USDC" in r.json()["detail"]
+
+    def test_funding_an_issue_with_no_price_is_refused(self, client: TestClient) -> None:
+        issue_id = self._awaiting(client)
+        rec = store.get(issue_id)
+        assert rec is not None
+        rec.price = None
+        store.save(rec)
+
+        r = client.post(f"{API}/issues/{issue_id}/fund")
+        assert r.status_code == 422
+        assert "no price" in r.json()["detail"]
 
 
 class TestMetrics:

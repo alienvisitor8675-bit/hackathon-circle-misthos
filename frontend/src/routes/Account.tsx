@@ -108,8 +108,11 @@ export default function AccountPage() {
               </div>
             </Panel>
 
-            {account?.role === 'publisher' && account.github_login && (
-              <Repositories publisherId={account.party_id} />
+            {/* Rendered for any publisher, but the install link inside waits for a
+                linked login: a connection is attributed to the publisher whose *linked*
+                login installed it, so linking comes first and this panel says so. */}
+            {account?.role === 'publisher' && (
+              <Repositories publisherId={account.party_id} linked={Boolean(account.github_login)} />
             )}
             {!account && <ChooseSide github={me.data.method === 'github'} onDone={changed} />}
             {!account && me.data.method === 'github' && (
@@ -347,19 +350,27 @@ function ConnectWallet({
 }
 
 /**
+ * The repositories a publisher installed the App on, and where to install it.
+ *
+ * Shared by the panel below and by the linking panel, which offers installing as the
+ * way to link: one query key and one fetcher, so React Query makes one request.
+ */
+const repositoriesQuery = (publisherId: string) => ({
+  queryKey: ['repositories', publisherId],
+  queryFn: async () =>
+    unwrap(
+      await api.GET('/api/v1/publishers/{publisher_id}/repositories', {
+        params: { path: { publisher_id: publisherId } },
+      }),
+    ),
+})
+
+/**
  * Repositories the publisher installed the GitHub App on (#6). There, an issue is
  * priced by a label and funded by a comment, without coming back here.
  */
-function Repositories({ publisherId }: { publisherId: string }) {
-  const { data } = useQuery({
-    queryKey: ['repositories', publisherId],
-    queryFn: async () =>
-      unwrap(
-        await api.GET('/api/v1/publishers/{publisher_id}/repositories', {
-          params: { path: { publisher_id: publisherId } },
-        }),
-      ),
-  })
+function Repositories({ publisherId, linked }: { publisherId: string; linked: boolean }) {
+  const { data } = useQuery(repositoriesQuery(publisherId))
   if (!data) return null
   return (
     <Panel title="Your repositories">
@@ -375,8 +386,9 @@ function Repositories({ publisherId }: { publisherId: string }) {
         </ul>
       ) : (
         <p className="dim" style={{ marginBottom: 12 }}>
-          No repositories yet. Install the Misthos GitHub App on one, signed in to GitHub as
-          the account you linked.
+          {linked
+            ? 'No repositories yet. Install the Misthos GitHub App on one, signed in to GitHub as the account you linked.'
+            : 'Nothing connected yet. Link your GitHub account above, then install the Misthos App on a repository — the repositories it covers appear here.'}
         </p>
       )}
       <p className="stat-hint">
@@ -384,11 +396,21 @@ function Repositories({ publisherId }: { publisherId: string }) {
         it priced, then comment <code>/misthos approve</code> on it to commit the funds.
         Contributors claim it with <code>/misthos claim</code>.
       </p>
-      {data.install_url && (
+      {linked && (data.settings_url || data.install_url) && (
+        // Offered here once GitHub is linked, which is the order attribution needs. Once
+        // a repository is connected the App is installed and GitHub's page for that
+        // installation is the only place to add or remove repositories, so that is what
+        // the button becomes rather than offering an install the App is already on.
         <div className="btn-row" style={{ marginTop: 12 }}>
-          <a className="btn" href={data.install_url} target="_blank" rel="noreferrer">
-            Install the GitHub App
-          </a>
+          {data.settings_url ? (
+            <a className="btn" href={data.settings_url}>
+              Open {data.app_name ?? 'App'} settings
+            </a>
+          ) : (
+            <a className="btn" href={data.install_url ?? '#'}>
+              Install the GitHub App
+            </a>
+          )}
         </div>
       )}
     </Panel>
@@ -519,7 +541,7 @@ function ChooseSide({ github, onDone }: { github: boolean; onDone: () => void })
         </label>
         {role === 'publisher' && (
           <label className="field">
-            <span>Budget in USDC, which caps every price you are offered</span>
+            <span>Budget in USDC, for your own reporting</span>
             <input
               className="input"
               value={budget}
