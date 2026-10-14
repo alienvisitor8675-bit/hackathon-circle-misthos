@@ -184,7 +184,7 @@ export default function Dashboard() {
       <div className="grid k2">
         <Panel title="Recent decisions" flush>
           {decisions.data?.length ? (
-            <div style={{ padding: '4px 18px 10px' }}>
+            <div style={{ padding: '4px 16px 10px' }}>
               <div className="timeline">
                 {decisions.data.map((d) => (
                   <div className="tl-item" key={d.id}>

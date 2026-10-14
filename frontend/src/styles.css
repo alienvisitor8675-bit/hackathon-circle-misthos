@@ -1,26 +1,40 @@
-/* Misthos web. Dark, mono, one accent. No component library: the surface is
-   small enough that owning the CSS is cheaper than owning a dependency. */
+/* Misthos web. Light and editorial, like the landing page at `/` (#168): white pages,
+   black ink, Georgia for headings and figures, Arial for everything else. State colours
+   stay, darkened for a white background. No component library: the surface is small
+   enough that owning the CSS is cheaper than owning a dependency. */
 
 :root {
-  --black: #0a0806;
-  --panel: #12100d;
-  --panel-2: #171410;
-  --line: #2a2622;
-  --line-soft: #201d19;
-  --white: #f5f2ee;
-  --g100: #d8d2c9;
-  --g300: #a49b8f;
-  --g500: #6f6659;
-  --g700: #3a342c;
-  --accent: #d2703c;
-  --accent-soft: rgba(210, 112, 60, 0.12);
-  --accent-line: rgba(210, 112, 60, 0.3);
-  --ok: #6f9e6a;
-  --warn: #c9a227;
-  --bad: #c2543f;
-  --info: #6f8fa8;
-  --mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
-  --serif: 'Instrument Serif', ui-serif, Georgia, serif;
+  color-scheme: light;
+  --bg: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #fafafa;
+  --surface-3: #f4f4f4;
+  --line: #e5e5e5;
+  --line-soft: #efefef;
+  --line-strong: #dedede;
+  --ink: #111111;
+  --ink-2: #333333;
+  --ink-3: #555555;
+  --ink-4: #6b6b6b;
+  --ink-5: #a3a3a3;
+  --accent: #111111;
+  --accent-soft: #f2f2f2;
+  --accent-line: #111111;
+  --ok: #2e6b3f;
+  --ok-soft: #eef6ef;
+  --ok-line: #bcd8c2;
+  --warn: #7f5a00;
+  --warn-soft: #fbf3df;
+  --warn-line: #e6d29e;
+  --bad: #a8372b;
+  --bad-soft: #fcefed;
+  --bad-line: #ebbdb6;
+  --info: #2c5a80;
+  --info-soft: #ebf2f8;
+  --info-line: #bdd1e3;
+  --sans: Arial, Helvetica, sans-serif;
+  --serif: Georgia, 'Times New Roman', serif;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   --radius: 3px;
 }
 
@@ -37,9 +51,9 @@ body,
 }
 
 body {
-  background: var(--black);
-  color: var(--white);
-  font-family: var(--mono);
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--sans);
   font-size: 13px;
   line-height: 1.6;
   -webkit-font-smoothing: antialiased;
@@ -53,6 +67,17 @@ a {
 button {
   font: inherit;
   cursor: pointer;
+}
+
+code {
+  font-family: var(--mono);
+  font-size: 0.92em;
+  overflow-wrap: anywhere;
+}
+
+::selection {
+  background: var(--ink);
+  color: #fff;
 }
 
 /* ---------------------------------------------------------------- layout */
@@ -69,73 +94,67 @@ button {
   z-index: 20;
   display: flex;
   align-items: center;
-  gap: 24px;
-  padding: 0 28px;
-  height: 52px;
-  background: rgba(10, 8, 6, 0.92);
+  gap: 28px;
+  padding: 0 32px;
+  height: 68px;
+  background: rgba(255, 255, 255, 0.94);
   backdrop-filter: blur(8px);
-  border-bottom: 1px solid var(--line);
+  border-bottom: 1px solid #e8e8e8;
 }
 
 .brand {
-  display: flex;
-  align-items: baseline;
-  gap: 9px;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--ink);
+  font-size: 19px;
+  font-weight: 700;
+  letter-spacing: -0.07em;
+  flex-shrink: 0;
 }
 
-/* The landing page's mark, inverted for the dark app. The brand links home to it. */
+/* The landing page's mark. The brand links home to it. */
 .brand-mark {
-  align-self: center;
   display: grid;
   place-items: center;
-  width: 24px;
-  height: 24px;
-  padding-right: 2px;
+  width: 31px;
+  height: 31px;
+  padding-right: 3px;
   border-radius: 50%;
-  background: var(--white);
-  color: var(--black);
-  font-family: Georgia, 'Times New Roman', serif;
-  font-size: 15px;
+  background: var(--ink);
+  color: #fff;
+  font-family: var(--serif);
+  font-size: 20px;
   font-weight: 700;
   letter-spacing: -0.1em;
 }
 
-.brand-name {
-  font-family: var(--serif);
-  font-size: 21px;
-  letter-spacing: 0.01em;
-}
-
-.brand-tag {
-  font-size: 9px;
-  letter-spacing: 0.16em;
-  text-transform: uppercase;
-  color: var(--g500);
-}
-
 .nav-links {
   display: flex;
-  gap: 4px;
-  margin-left: 8px;
+  align-items: center;
+  gap: 24px;
+  margin-left: 18px;
+  height: 100%;
 }
 
 .nav-links a {
-  font-size: 11.5px;
-  letter-spacing: 0.05em;
-  color: var(--g300);
-  padding: 6px 11px;
-  border-radius: var(--radius);
-  transition: color 0.12s, background 0.12s;
+  display: flex;
+  align-items: center;
+  height: 100%;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink-4);
+  box-shadow: inset 0 -2px 0 transparent;
+  transition: color 0.15s, box-shadow 0.15s;
 }
 
 .nav-links a:hover {
-  color: var(--white);
-  background: var(--panel-2);
+  color: var(--ink);
 }
 
 .nav-links a.active {
-  color: var(--white);
-  background: var(--accent-soft);
+  color: var(--ink);
+  box-shadow: inset 0 -2px 0 var(--ink);
 }
 
 .nav-right {
@@ -145,12 +164,48 @@ button {
   gap: 10px;
 }
 
+/* The way in, as the landing page draws it. */
+.nav-cta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 15px;
+  border-radius: var(--radius);
+  background: var(--ink);
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: background 0.2s, transform 0.2s;
+}
+
+.nav-cta:hover {
+  background: var(--ink-2);
+  transform: translateY(-1px);
+}
+
+.nav-cta svg,
+.footer-link svg {
+  width: 13px;
+  height: 13px;
+}
+
+.footer-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.footer-link:hover {
+  color: var(--ink);
+}
+
 .main {
   flex: 1;
   width: 100%;
   max-width: 1180px;
   margin: 0 auto;
-  padding: 30px 28px 80px;
+  padding: 40px 32px 90px;
 }
 
 /* ----------------------------------------------------------------- atoms */
@@ -159,40 +214,51 @@ button {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-size: 10px;
-  letter-spacing: 0.09em;
+  font-size: 9.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  padding: 3px 8px;
-  border: 1px solid var(--line);
+  padding: 3px 9px;
+  border: 1px solid var(--line-strong);
   border-radius: 999px;
-  color: var(--g300);
+  background: var(--surface);
+  color: var(--ink-3);
   white-space: nowrap;
 }
 
 .chip.accent {
-  color: var(--accent);
-  border-color: var(--accent-line);
-  background: var(--accent-soft);
+  color: var(--ink);
+  border-color: var(--ink);
+  background: var(--surface);
 }
 
 .chip.ok {
   color: var(--ok);
-  border-color: rgba(111, 158, 106, 0.35);
+  border-color: var(--ok-line);
+  background: var(--ok-soft);
 }
 
 .chip.warn {
   color: var(--warn);
-  border-color: rgba(201, 162, 39, 0.35);
+  border-color: var(--warn-line);
+  background: var(--warn-soft);
 }
 
 .chip.bad {
   color: var(--bad);
-  border-color: rgba(194, 84, 63, 0.35);
+  border-color: var(--bad-line);
+  background: var(--bad-soft);
 }
 
 .chip.info {
   color: var(--info);
-  border-color: rgba(111, 143, 168, 0.35);
+  border-color: var(--info-line);
+  background: var(--info-soft);
+}
+
+a.chip:hover {
+  border-color: var(--ink);
+  color: var(--ink);
 }
 
 .dot {
@@ -203,38 +269,48 @@ button {
 }
 
 .panel {
-  background: var(--panel);
+  background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius);
-  padding: 18px;
+  padding: 20px 22px;
 }
 
+/* A flush panel holds a table, which scrolls inside it on a narrow screen. */
 .panel.flush {
   padding: 0;
+  overflow-x: auto;
 }
 
 .panel-title {
-  font-size: 10px;
-  letter-spacing: 0.14em;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
   text-transform: uppercase;
-  color: var(--g500);
-  margin-bottom: 14px;
+  color: var(--ink-4);
+  margin-bottom: 16px;
+}
+
+.panel.flush > .panel-title {
+  padding: 18px 16px 0;
 }
 
 .btn {
-  font-size: 11.5px;
-  letter-spacing: 0.05em;
-  padding: 8px 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 10px 16px;
   border-radius: var(--radius);
-  border: 1px solid var(--line);
-  background: transparent;
-  color: var(--g100);
-  transition: border-color 0.12s, color 0.12s, background 0.12s;
+  border: 1px solid var(--line-strong);
+  background: var(--surface);
+  color: var(--ink);
+  transition: border-color 0.15s, background 0.15s, transform 0.15s;
 }
 
 .btn:hover:not(:disabled) {
-  border-color: var(--accent-line);
-  color: var(--accent);
+  border-color: #777;
 }
 
 .btn:disabled {
@@ -243,15 +319,15 @@ button {
 }
 
 .btn.primary {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: #1a0f07;
-  font-weight: 600;
+  background: var(--ink);
+  border-color: var(--ink);
+  color: #fff;
 }
 
 .btn.primary:hover:not(:disabled) {
-  opacity: 0.88;
-  color: #1a0f07;
+  background: var(--ink-2);
+  border-color: var(--ink-2);
+  transform: translateY(-1px);
 }
 
 .btn-row {
@@ -261,12 +337,12 @@ button {
 }
 
 .muted {
-  color: var(--g500);
+  color: var(--ink-4);
 }
 
 /* What the Repository field understood from what was typed or pasted. */
 .field-note {
-  color: var(--g500);
+  color: var(--ink-4);
 }
 
 .field-note.bad {
@@ -274,7 +350,7 @@ button {
 }
 
 .dim {
-  color: var(--g300);
+  color: var(--ink-3);
 }
 
 .mono-num {
@@ -288,21 +364,24 @@ button {
   align-items: flex-end;
   justify-content: space-between;
   gap: 20px;
-  margin-bottom: 22px;
+  margin-bottom: 28px;
   flex-wrap: wrap;
 }
 
 .page-title {
   font-family: var(--serif);
-  font-size: 34px;
+  font-size: 44px;
   font-weight: 400;
-  line-height: 1.1;
+  letter-spacing: -0.045em;
+  line-height: 1.05;
+  color: var(--ink);
 }
 
 .page-sub {
-  color: var(--g300);
-  font-size: 12.5px;
-  margin-top: 6px;
+  color: var(--ink-4);
+  font-size: 13px;
+  line-height: 1.7;
+  margin-top: 10px;
   max-width: 660px;
 }
 
@@ -320,35 +399,39 @@ button {
 }
 
 .hero-cell {
-  background: var(--panel);
-  padding: 22px;
+  background: var(--surface);
+  padding: 26px 28px;
 }
 
 .hero-label {
-  font-size: 10px;
-  letter-spacing: 0.14em;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
   text-transform: uppercase;
-  color: var(--g500);
+  color: var(--ink-4);
 }
 
 .hero-value {
   font-family: var(--serif);
-  font-size: 60px;
+  font-size: 64px;
+  letter-spacing: -0.05em;
   line-height: 1;
-  margin: 10px 0 4px;
-  color: var(--white);
+  margin: 12px 0 6px;
+  color: var(--ink);
 }
 
 .hero-note {
-  font-size: 11.5px;
-  color: var(--g300);
+  font-size: 12px;
+  line-height: 1.7;
+  color: var(--ink-4);
 }
 
 .hero-quote {
   font-family: var(--serif);
   font-style: italic;
-  font-size: 17px;
-  color: var(--g100);
+  font-size: 19px;
+  letter-spacing: -0.02em;
+  color: var(--ink-2);
   line-height: 1.5;
 }
 
@@ -371,28 +454,34 @@ button {
 }
 
 .stat-label {
-  font-size: 10px;
-  letter-spacing: 0.12em;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
   text-transform: uppercase;
-  color: var(--g500);
-  margin-bottom: 8px;
+  color: var(--ink-4);
+  margin-bottom: 10px;
 }
 
 .stat-value {
-  font-size: 24px;
+  font-family: var(--serif);
+  font-size: 30px;
+  letter-spacing: -0.04em;
+  line-height: 1.1;
   font-variant-numeric: tabular-nums;
+  color: var(--ink);
 }
 
 .stat-hint {
   font-size: 11px;
-  color: var(--g500);
-  margin-top: 6px;
+  line-height: 1.6;
+  color: var(--ink-4);
+  margin-top: 8px;
 }
 
 .bars {
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 10px;
 }
 
 .bar-row {
@@ -400,7 +489,7 @@ button {
   grid-template-columns: 130px 1fr 34px;
   align-items: center;
   gap: 10px;
-  font-size: 11.5px;
+  font-size: 12px;
 }
 
 .bar-track {
@@ -411,13 +500,13 @@ button {
 }
 
 .bar-fill {
+  display: block;
   height: 100%;
-  background: var(--accent);
-  opacity: 0.85;
+  background: var(--ink);
 }
 
 .bar-fill.cool {
-  background: var(--info);
+  background: var(--ink-5);
 }
 
 /* ----------------------------------------------------------------- tables */
@@ -430,20 +519,21 @@ button {
 
 .table th {
   text-align: left;
-  font-size: 9.5px;
-  letter-spacing: 0.13em;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.15em;
   text-transform: uppercase;
-  color: var(--g500);
-  font-weight: 500;
-  padding: 10px 14px;
+  color: var(--ink-4);
+  padding: 13px 16px;
   border-bottom: 1px solid var(--line);
   white-space: nowrap;
 }
 
 .table td {
-  padding: 11px 14px;
+  padding: 13px 16px;
   border-bottom: 1px solid var(--line-soft);
   vertical-align: middle;
+  color: var(--ink-2);
 }
 
 .table tbody tr {
@@ -451,34 +541,50 @@ button {
 }
 
 .table tbody tr:hover {
-  background: var(--panel-2);
+  background: var(--surface-2);
 }
 
 .table tbody tr:last-child td {
   border-bottom: none;
 }
 
+.table tfoot td {
+  border-top: 1px solid var(--line);
+  border-bottom: none;
+}
+
+/* Inside a flush panel a table keeps its columns and scrolls, rather than squeezing
+   the issue titles into a sliver on a phone. */
+.panel.flush > .table {
+  min-width: 680px;
+}
+
 .row-link {
   display: block;
 }
 
+.row-link:hover .cell-title {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
 .cell-title {
-  color: var(--white);
-  font-weight: 500;
+  color: var(--ink);
+  font-weight: 600;
 }
 
 .cell-repo {
-  color: var(--g500);
+  color: var(--ink-4);
   font-size: 11px;
-  margin-top: 2px;
+  margin-top: 3px;
 }
 
 /* ------------------------------------------------------------ issue detail */
 
 .detail-head {
   border-bottom: 1px solid var(--line);
-  padding-bottom: 20px;
-  margin-bottom: 22px;
+  padding-bottom: 24px;
+  margin-bottom: 26px;
 }
 
 .detail-meta {
@@ -486,20 +592,23 @@ button {
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-  margin-bottom: 12px;
+  margin-bottom: 14px;
 }
 
 .detail-title {
   font-family: var(--serif);
-  font-size: 31px;
+  font-size: 38px;
   font-weight: 400;
-  line-height: 1.2;
+  letter-spacing: -0.04em;
+  line-height: 1.12;
   margin-bottom: 10px;
+  color: var(--ink);
 }
 
 .detail-summary {
-  color: var(--g300);
+  color: var(--ink-3);
   max-width: 780px;
+  line-height: 1.7;
 }
 
 .detail-cols {
@@ -524,6 +633,7 @@ button {
   gap: 0;
   flex-wrap: wrap;
   row-gap: 8px;
+  margin-top: 4px;
 }
 
 .step {
@@ -536,10 +646,11 @@ button {
   display: flex;
   align-items: center;
   gap: 7px;
-  font-size: 10.5px;
-  letter-spacing: 0.06em;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--g500);
+  color: var(--ink-4);
   padding: 3px 0;
 }
 
@@ -547,32 +658,32 @@ button {
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  border: 1px solid var(--g700);
+  border: 1px solid var(--ink-5);
 }
 
 .step-node.done {
-  color: var(--g300);
+  color: var(--ink-2);
 }
 
 .step-node.done .marker {
-  background: var(--g700);
-  border-color: var(--g700);
+  background: var(--ink-2);
+  border-color: var(--ink-2);
 }
 
 .step-node.current {
-  color: var(--accent);
+  color: var(--ink);
 }
 
 .step-node.current .marker {
-  background: var(--accent);
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px var(--accent-soft);
+  background: var(--ink);
+  border-color: var(--ink);
+  box-shadow: 0 0 0 3px var(--line);
 }
 
 .step-line {
   width: 18px;
   height: 1px;
-  background: var(--line);
+  background: var(--line-strong);
   margin: 0 8px;
   flex-shrink: 0;
 }
@@ -581,15 +692,18 @@ button {
 
 .price-value {
   font-family: var(--serif);
-  font-size: 44px;
+  font-size: 48px;
+  letter-spacing: -0.05em;
   line-height: 1;
+  color: var(--ink);
 }
 
 .price-total {
   display: flex;
   justify-content: space-between;
-  font-size: 12px;
-  padding: 8px 0;
+  gap: 12px;
+  font-size: 12.5px;
+  padding: 10px 0;
   border-bottom: 1px solid var(--line-soft);
 }
 
@@ -599,16 +713,16 @@ button {
 
 .justify {
   font-size: 12.5px;
-  color: var(--g100);
+  color: var(--ink-2);
   line-height: 1.7;
-  border-left: 2px solid var(--accent-line);
+  border-left: 2px solid var(--ink);
   padding-left: 12px;
   margin-top: 14px;
 }
 
 .confidence-note {
   font-size: 11px;
-  color: var(--g500);
+  color: var(--ink-4);
   margin-top: 8px;
   font-style: italic;
 }
@@ -622,7 +736,7 @@ button {
 }
 
 .list-item {
-  padding: 11px 0;
+  padding: 12px 0;
   border-bottom: 1px solid var(--line-soft);
   font-size: 12.5px;
 }
@@ -638,7 +752,7 @@ button {
 .criteria {
   display: flex;
   flex-direction: column;
-  gap: 9px;
+  gap: 10px;
 }
 
 .criteria li {
@@ -646,13 +760,13 @@ button {
   display: flex;
   gap: 10px;
   font-size: 12.5px;
-  color: var(--g100);
+  color: var(--ink-2);
   line-height: 1.6;
 }
 
 .criteria li::before {
   content: '—';
-  color: var(--accent);
+  color: var(--ink);
   flex-shrink: 0;
 }
 
@@ -665,7 +779,7 @@ button {
   display: grid;
   grid-template-columns: 96px 1fr;
   gap: 14px;
-  padding: 10px 0;
+  padding: 12px 0;
   border-bottom: 1px solid var(--line-soft);
   font-size: 12px;
 }
@@ -675,53 +789,56 @@ button {
 }
 
 .tl-time {
-  color: var(--g500);
+  color: var(--ink-4);
   font-size: 11px;
 }
 
 .tl-action {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   margin-bottom: 3px;
+  color: var(--ink);
 }
 
 .tl-actor {
-  font-size: 9.5px;
+  font-size: 9px;
+  font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: var(--g300);
-  border: 1px solid var(--line);
+  color: var(--ink-3);
+  border: 1px solid var(--line-strong);
   border-radius: 999px;
   padding: 1px 7px;
 }
 
 .tl-outcome {
-  color: var(--g300);
+  color: var(--ink-3);
 }
 
 .kv {
   display: grid;
   grid-template-columns: 108px 1fr;
-  gap: 8px 12px;
-  font-size: 12px;
+  gap: 9px 12px;
+  font-size: 12.5px;
 }
 
 .kv dt {
-  color: var(--g500);
+  color: var(--ink-4);
 }
 
 .kv dd {
-  color: var(--g100);
+  color: var(--ink);
   word-break: break-all;
 }
 
 .findings {
   display: flex;
   flex-direction: column;
-  gap: 7px;
+  gap: 8px;
   font-size: 12.5px;
-  color: var(--g100);
+  color: var(--ink-2);
 }
 
 .findings li {
@@ -732,51 +849,91 @@ button {
 
 .findings li::before {
   content: '·';
-  color: var(--accent);
+  color: var(--ink);
 }
 
 .filter-bar {
   display: flex;
   gap: 7px;
   flex-wrap: wrap;
-  margin-bottom: 16px;
+  margin-bottom: 18px;
   align-items: center;
+}
+
+.filter-bar .chip {
+  padding: 6px 10px;
+}
+
+.filter-bar .chip:hover {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+.filter-bar .chip.accent {
+  background: var(--ink) !important;
+  border-color: var(--ink);
+  color: #fff;
 }
 
 .empty {
   padding: 40px 20px;
   text-align: center;
-  color: var(--g500);
+  color: var(--ink-4);
 }
 
 .error-box {
-  border: 1px solid rgba(194, 84, 63, 0.4);
-  background: rgba(194, 84, 63, 0.07);
+  border: 1px solid var(--bad-line);
+  background: var(--bad-soft);
   border-radius: var(--radius);
   padding: 14px 16px;
-  color: #e2a396;
+  color: #8f2f24;
   font-size: 12.5px;
+  line-height: 1.6;
 }
 
 .banner {
-  border: 1px solid var(--accent-line);
-  background: var(--accent-soft);
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--ink);
+  background: var(--surface-3);
   border-radius: var(--radius);
-  padding: 11px 14px;
-  font-size: 12px;
-  color: var(--g100);
-  margin-bottom: 20px;
+  padding: 12px 16px;
+  font-size: 12.5px;
+  line-height: 1.65;
+  color: var(--ink-2);
+  margin-bottom: 22px;
 }
 
+.banner a {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* The landing page's footer, with the deployment's own words about its money. */
 .footer {
-  border-top: 1px solid var(--line);
-  padding: 18px 28px;
+  border-top: 1px solid #e8e8e8;
+  padding: 22px 32px;
   font-size: 11px;
-  color: var(--g500);
+  color: var(--ink-4);
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: 12px 24px;
   flex-wrap: wrap;
+}
+
+.footer .brand {
+  font-size: 17px;
+}
+
+.footer .brand-mark {
+  width: 27px;
+  height: 27px;
+  font-size: 17px;
+}
+
+.footer-note {
+  flex: 1 1 320px;
+  line-height: 1.6;
 }
 
 /* ----------------------------------------------------------------- plans */
@@ -788,8 +945,9 @@ button {
 
 .plan-from,
 .plan-per {
-  font-family: var(--mono);
+  font-family: var(--sans);
   font-size: 13px;
+  letter-spacing: 0;
 }
 
 /* ----------------------------------------------------------- comparables */
@@ -799,7 +957,7 @@ button {
   margin-top: 8px;
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
 }
 
 .comparables li {
@@ -813,6 +971,11 @@ button {
 .comparables a {
   display: flex;
   flex-direction: column;
+}
+
+.comparables a:hover {
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 
 /* ----------------------------------------------------------------- forms */
@@ -834,8 +997,12 @@ button {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  font-size: 11.5px;
-  color: var(--g300);
+  font-size: 12px;
+  color: var(--ink-3);
+}
+
+.field > span:first-child {
+  color: var(--ink-2);
 }
 
 .field-row {
@@ -851,42 +1018,49 @@ button {
 
 .input {
   font: inherit;
-  font-size: 12.5px;
-  color: var(--white);
-  background: var(--panel-2);
-  border: 1px solid var(--line);
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line-strong);
   border-radius: var(--radius);
-  padding: 8px 10px;
+  padding: 10px 12px;
   width: 100%;
   resize: vertical;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.input::placeholder {
+  color: var(--ink-5);
 }
 
 .input:focus {
   outline: none;
-  border-color: var(--accent-line);
+  border-color: var(--ink);
+  box-shadow: 0 0 0 3px var(--accent-soft);
 }
 
 .input:invalid:not(:placeholder-shown) {
-  border-color: rgba(194, 84, 63, 0.5);
+  border-color: var(--bad-line);
 }
 
 .radio-row {
   display: flex;
   gap: 18px;
   flex-wrap: wrap;
-  color: var(--g100);
+  color: var(--ink-2);
 }
 
 .radio-row label,
 .check {
   cursor: pointer;
-  color: var(--g100);
-  font-size: 12px;
+  color: var(--ink-2);
+  font-size: 12.5px;
 }
 
 input[type='radio'],
 input[type='checkbox'] {
-  accent-color: var(--accent);
+  accent-color: var(--ink);
 }
 
 .form-error {
@@ -895,6 +1069,7 @@ input[type='checkbox'] {
 
 .action-hint {
   margin-bottom: 12px;
+  line-height: 1.65;
 }
 
 .align-end {
@@ -904,10 +1079,18 @@ input[type='checkbox'] {
 .demo-shortcuts {
   margin-top: 18px;
   padding-top: 14px;
-  border-top: 1px dashed var(--line);
+  border-top: 1px dashed var(--line-strong);
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+/* Keyboard focus is always visible, in the ink colour. */
+a:focus-visible,
+button:focus-visible,
+.btn:focus-visible {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
 }
 
 @media (max-width: 980px) {
@@ -921,6 +1104,53 @@ input[type='checkbox'] {
     grid-template-columns: 1fr;
   }
   .main {
-    padding: 22px 18px 60px;
+    padding: 28px 20px 64px;
+  }
+}
+
+/* A phone: the links take a row of their own and scroll inside it, so the page never
+   scrolls sideways. */
+@media (max-width: 760px) {
+  .nav {
+    flex-wrap: wrap;
+    height: auto;
+    gap: 10px 14px;
+    padding: 12px 20px 0;
+  }
+  .nav-right {
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+  .nav-links {
+    order: 3;
+    width: 100%;
+    height: 40px;
+    margin: 0;
+    gap: 20px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .nav-links a {
+    flex-shrink: 0;
+  }
+  .page-title {
+    font-size: 34px;
+  }
+  .detail-title {
+    font-size: 30px;
+  }
+  .hero-value {
+    font-size: 52px;
+  }
+  .kv {
+    grid-template-columns: 96px 1fr;
+  }
+  .tl-item {
+    grid-template-columns: 1fr;
+    gap: 4px;
+  }
+  .footer {
+    padding: 20px;
   }
 }

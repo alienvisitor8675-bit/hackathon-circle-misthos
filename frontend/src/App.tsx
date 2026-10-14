@@ -1,6 +1,7 @@
 import { lazy, Suspense } from 'react'
 import { Link, NavLink, Outlet, Route, Routes } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
+import { ArrowRight, ArrowUpRight } from 'lucide-react'
 import { api, type IssueOut } from './lib/client'
 import { useHealth, useMe } from './lib/session'
 import Dashboard from './routes/Dashboard'
@@ -14,6 +15,8 @@ import Spend from './routes/Spend'
 
 // Signing carries the curve arithmetic, so it loads only where someone signs in.
 const AccountPage = lazy(() => import('./routes/Account'))
+
+const REPO_URL = 'https://github.com/vanduc2514/hackathon-circle-misthos'
 
 /** Say what the money is, in the words a user would look for. */
 const moneyChip: Record<'simulated' | 'test' | 'real' | 'unknown', string> = {
@@ -36,8 +39,7 @@ function Layout() {
           <span className="brand-mark" aria-hidden="true">
             m.
           </span>
-          <span className="brand-name">Misthos</span>
-          <span className="brand-tag">priced OSS work</span>
+          <span>misthos</span>
         </Link>
         <div className="nav-links">
           <NavLink to="/overview" className={({ isActive }) => (isActive ? 'active' : '')}>
@@ -77,24 +79,37 @@ function Layout() {
               {moneyChip[health.money]}
             </span>
           )}
-          <Link to="/account" className={`chip ${me ? '' : 'accent'}`}>
-            {!me
-              ? 'Sign in'
-              : account
+          {me ? (
+            <Link to="/account" className="chip">
+              {account
                 ? `${account.role} · ${account.github_login ?? account.party_id}`
                 : 'Choose a side'}
-          </Link>
+            </Link>
+          ) : (
+            <Link to="/account" className="nav-cta">
+              Sign in <ArrowRight aria-hidden="true" />
+            </Link>
+          )}
         </div>
       </nav>
       <main className="main">
         <Outlet />
       </main>
       <footer className="footer">
-        <span>
-          Misthos &middot; fixed price per issue, settled in USDC on Arc.{' '}
-          {health?.money_note ?? ''}
+        <Link to="/" className="brand" aria-label="Misthos home">
+          <span className="brand-mark" aria-hidden="true">
+            m.
+          </span>
+          <span>misthos</span>
+        </Link>
+        <span className="footer-note">
+          Fixed price per issue, settled in USDC on Arc. {health?.money_note ?? ''}
+          {health?.simulated ? ` ${health.seeded_issues} seeded issues.` : ''}
         </span>
-        <span>{health ? `${health.seeded_issues} seeded issues` : ''}</span>
+        <a href={REPO_URL} target="_blank" rel="noreferrer" className="footer-link">
+          Built in the open <ArrowUpRight aria-hidden="true" />
+        </a>
+        <span>© 2026 Misthos</span>
       </footer>
     </div>
   )
