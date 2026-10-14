@@ -14,7 +14,7 @@ test('the overview follows what the API reports about the deployment', async ({ 
   const health = await (await request.get('/api/v1/health')).json()
   expect(health.simulated).toBe(true) // playwright.config starts the API simulated
 
-  await page.goto('/')
+  await page.goto('/overview')
   await expect(page.getByRole('button', { name: 'Reset simulation' })).toBeVisible()
   const banner = page.locator('.banner').first()
   await expect(banner).toContainText('Simulated build')

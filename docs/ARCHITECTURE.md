@@ -149,7 +149,7 @@ The Circle box is a platform dependency rather than a library. Three things in t
 | Component | Responsibility | Notes |
 | --- | --- | --- |
 | `frontend/` | The interface for publishers and contributors | Vite 6, React 19, TypeScript. An SPA, so no server rendering and no SEO to lose behind a login |
-| Routing | `react-router-dom` | Overview, issues, issue detail with its actions, loop, spend, publish, account |
+| Routing | `react-router-dom` | The public landing page at `/`, then the app under its own nav: overview (`/overview`), issues, issue detail with its actions, loop, spend, plans, publish, account |
 | Server state | TanStack Query | Caching and invalidation. A lifecycle action invalidates the issue, its timeline, the list and the metrics in one go |
 | API access | `openapi-typescript` plus `openapi-fetch` | The client is generated from the API's OpenAPI schema, so backend and frontend drift is a compile error rather than a runtime surprise |
 
