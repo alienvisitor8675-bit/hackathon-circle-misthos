@@ -83,6 +83,23 @@ button {
   gap: 9px;
 }
 
+/* The landing page's mark, inverted for the dark app. The brand links home to it. */
+.brand-mark {
+  align-self: center;
+  display: grid;
+  place-items: center;
+  width: 24px;
+  height: 24px;
+  padding-right: 2px;
+  border-radius: 50%;
+  background: var(--white);
+  color: var(--black);
+  font-family: Georgia, 'Times New Roman', serif;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.1em;
+}
+
 .brand-name {
   font-family: var(--serif);
   font-size: 21px;

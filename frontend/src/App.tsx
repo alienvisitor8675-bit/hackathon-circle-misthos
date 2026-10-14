@@ -1,11 +1,12 @@
 import { lazy, Suspense } from 'react'
-import { Link, NavLink, Route, Routes } from 'react-router-dom'
+import { Link, NavLink, Outlet, Route, Routes } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { api, type IssueOut } from './lib/client'
 import { useHealth, useMe } from './lib/session'
 import Dashboard from './routes/Dashboard'
 import Issues from './routes/Issues'
 import IssueDetail from './routes/IssueDetail'
+import Landing from './routes/Landing'
 import Loop from './routes/Loop'
 import Plans from './routes/Plans'
 import Publish from './routes/Publish'
@@ -22,7 +23,8 @@ const moneyChip: Record<'simulated' | 'test' | 'real' | 'unknown', string> = {
   unknown: 'not Arc: treat as real',
 }
 
-function Layout({ children }: { children: React.ReactNode }) {
+/** The app's own pages, under one nav. The landing page at `/` has its own. */
+function Layout() {
   const { data: health } = useHealth()
   const { data: me } = useMe()
   const account = me?.account ?? null
@@ -30,12 +32,15 @@ function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="shell">
       <nav className="nav">
-        <div className="brand">
+        <Link to="/" className="brand" aria-label="Misthos home">
+          <span className="brand-mark" aria-hidden="true">
+            m.
+          </span>
           <span className="brand-name">Misthos</span>
           <span className="brand-tag">priced OSS work</span>
-        </div>
+        </Link>
         <div className="nav-links">
-          <NavLink to="/" end className={({ isActive }) => (isActive ? 'active' : '')}>
+          <NavLink to="/overview" className={({ isActive }) => (isActive ? 'active' : '')}>
             Overview
           </NavLink>
           <NavLink to="/issues" className={({ isActive }) => (isActive ? 'active' : '')}>
@@ -81,7 +86,9 @@ function Layout({ children }: { children: React.ReactNode }) {
           </Link>
         </div>
       </nav>
-      <main className="main">{children}</main>
+      <main className="main">
+        <Outlet />
+      </main>
       <footer className="footer">
         <span>
           Misthos &middot; fixed price per issue, settled in USDC on Arc.{' '}
@@ -93,16 +100,24 @@ function Layout({ children }: { children: React.ReactNode }) {
   )
 }
 
-export default function App() {
+function NotFound() {
   const { data: issues } = useQuery({
     queryKey: ['issues'],
     queryFn: async () => (await api.GET('/api/v1/issues')).data as IssueOut[] | undefined,
   })
-
   return (
-    <Layout>
-      <Routes>
-        <Route path="/" element={<Dashboard />} />
+    <div className="empty">
+      Nothing here. {issues ? `${issues.length} issues are waiting on the Issues page.` : ''}
+    </div>
+  )
+}
+
+export default function App() {
+  return (
+    <Routes>
+      <Route index element={<Landing />} />
+      <Route element={<Layout />}>
+        <Route path="/overview" element={<Dashboard />} />
         <Route path="/issues" element={<Issues />} />
         <Route path="/issues/:issueId" element={<IssueDetail />} />
         <Route path="/loop" element={<Loop />} />
@@ -117,15 +132,8 @@ export default function App() {
             </Suspense>
           }
         />
-        <Route
-          path="*"
-          element={
-            <div className="empty">
-              Nothing here. {issues ? `${issues.length} issues are waiting on the Issues page.` : ''}
-            </div>
-          }
-        />
-      </Routes>
-    </Layout>
+        <Route path="*" element={<NotFound />} />
+      </Route>
+    </Routes>
   )
 }
