@@ -32,4 +32,5 @@ Notable changes to Misthos, newest first. The format follows
 
 ### Fixed
 
+- The header's money chip says USDC rather than TEST USDC (#138).
 - An issue's "Next step" panel no longer shows a source comment as text (#168, #169).

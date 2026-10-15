@@ -21,7 +21,7 @@ const REPO_URL = 'https://github.com/vanduc2514/hackathon-circle-misthos'
 /** Say what the money is, in the words a user would look for. */
 const moneyChip: Record<'simulated' | 'test' | 'real' | 'unknown', string> = {
   simulated: 'simulated',
-  test: 'test USDC',
+  test: 'USDC',
   real: 'real USDC',
   unknown: 'not Arc: treat as real',
 }
