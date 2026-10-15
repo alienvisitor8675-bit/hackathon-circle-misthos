@@ -156,7 +156,7 @@ export default function IssueDetail() {
 
           <Panel title="Decision log" flush>
             {timeline?.length ? (
-              <div style={{ padding: '4px 18px 10px' }}>
+              <div style={{ padding: '4px 16px 10px' }}>
                 <div className="timeline">
                   {[...timeline].reverse().map((t) => (
                     <div className="tl-item" key={t.id}>
@@ -341,10 +341,10 @@ export default function IssueDetail() {
           )}
 
           <Panel title="Next step">
-            // Keyed by issue id: React Router changes the `issue` prop without unmounting this
-          // component when only the id in the route changes, and every panel below seeds
-          // state from that prop. Without the key the criteria box, the pull request
-          // number and the decline reason all survive into the next issue.
+            {/* Keyed by issue id: React Router changes the `issue` prop without unmounting
+                this component when only the id in the route changes, and every panel below
+                seeds state from that prop. Without the key the criteria box, the pull
+                request number and the decline reason all survive into the next issue. */}
           <IssueActions
             key={issue.id}
             issue={issue}
