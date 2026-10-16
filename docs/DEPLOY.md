@@ -220,10 +220,10 @@ is real, or settle on Arc testnet as section 3 describes.
    would never arrive.
 
 4. **The publisher:**
-   - Signs in at http://localhost:5173/account, chooses publisher, and links the
-     GitHub account they will install the App with.
+   - Presses **Sign in** at http://localhost:5173, signs in with a wallet, links the
+     GitHub account they will install the App with, and chooses publisher.
    - Installs the App on the sandbox repository. **Your repositories** on the
-     account page lists it.
+     profile at `/account` lists it.
 
 5. **On GitHub:**
    1. Open an issue and add the `misthos` label. The App replies with what comparable

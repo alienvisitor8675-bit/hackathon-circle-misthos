@@ -89,7 +89,10 @@ export interface paths {
         put?: never;
         /**
          * Choose Role
-         * @description The first sign-in's one choice: publisher or contributor.
+         * @description The gate's last step: publisher or contributor, chosen once.
+         *
+         *     This creates the account. A GitHub login linked in the step before is adopted onto
+         *     it, so the account answers with `github_login` set.
          */
         post: operations["choose_role_api_v1_auth_role_post"];
         delete?: never;
@@ -110,6 +113,9 @@ export interface paths {
         /**
          * Start Github Link
          * @description Where to send the user to approve linking their GitHub account.
+         *
+         *     A signed-in wallet is enough: the gate links GitHub before the side is chosen
+         *     (#181), and the login is held for the wallet until choosing the side adopts it.
          */
         post: operations["start_github_link_api_v1_auth_github_start_post"];
         delete?: never;
@@ -129,9 +135,85 @@ export interface paths {
         put?: never;
         /**
          * Simulate Github Link
-         * @description Link a GitHub login without OAuth, for the simulation's demo only.
+         * @description Link a typed GitHub login without OAuth, for the simulation's demo only.
+         *
+         *     As with GitHub's own link, a wallet with no side yet has the login held until it
+         *     chooses one, and the answer says where the gate stands.
          */
         post: operations["simulate_github_link_api_v1_auth_github_simulate_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/circle/session": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Circle Session
+         * @description Start or continue signing in with a Circle wallet, before any account exists.
+         *
+         *     Not keyed by a party, because there is none yet: the browser's own sign-in id names
+         *     the Circle user. While the wallet does not exist the answer carries the challenge
+         *     that sets its PIN and creates it in Circle's frame; once it does, its address, which
+         *     is the address the sign-in message names. Nothing is written here.
+         */
+        post: operations["circle_session_api_v1_auth_circle_session_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/circle/wallet": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Circle Wallet
+         * @description The Circle wallet's address, once it exists; null while Circle is creating it.
+         *
+         *     Only reads. The browser asks this after Circle's frame closes, rather than starting
+         *     the session again, which would ask Circle for another PIN and wallet challenge.
+         */
+        post: operations["circle_wallet_api_v1_auth_circle_wallet_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/auth/circle/sign": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Circle Sign
+         * @description Have a Circle wallet sign the sign-in message: a `SIGN_MESSAGE` challenge.
+         *
+         *     Only a sign-in message is signed: one for this site, with a nonce `/auth/nonce`
+         *     issued and nobody has spent, naming this Circle wallet's own address. The nonce is
+         *     not spent here; `/auth/verify` spends it and checks the signature exactly as it
+         *     checks MetaMask's, so this route opens no way around it.
+         */
+        post: operations["circle_sign_api_v1_auth_circle_sign_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -218,9 +300,20 @@ export interface paths {
          * Commitment Plan
          * @description The two transactions the publisher's own wallet sends to fund the issue.
          *
-         *     The platform never signs a commitment: it moves the publisher's USDC. Approving
-         *     the price records it as the escrow's ceiling; the publisher's wallet then lets the
-         *     escrow take that amount and commits it, and approving again books it.
+         *     The platform never signs a commitment: it moves the publisher's USDC. Approving the
+         *     price records it as the escrow's ceiling; the publisher's wallet then lets the escrow
+         *     take that amount and commits it, and approving again books it.
+         *
+         *     The amount is the publisher's price -- the same value `_fund` records as the ceiling,
+         *     and never the engine's suggestion. The escrow refuses any commitment above the
+         *     ceiling (`ExceedsCeiling`), so a plan built from the suggestion could not be booked:
+         *     the wallet would be asked for a number the contract had already ruled out (#150).
+         *
+         *     The deadline is the one the approval fixed, to the second, and the amount and rate
+         *     are the approved ones too. Working them out here instead is what made the booking
+         *     refuse a commitment once an hour had passed between the plan and the booking: the
+         *     escrow's term starts at the commit, so `now + 14d` no longer matches what is on
+         *     chain, and it never matches again (#126).
          */
         get: operations["commitment_plan_api_v1_issues__issue_id__commitment_get"];
         put?: never;
@@ -1101,6 +1194,75 @@ export interface components {
             /** Tx Hash */
             tx_hash: string | null;
         };
+        /**
+         * CircleSignIn
+         * @description Which Circle sign-in this browser is continuing (#181).
+         *
+         *     The id is the browser's own, random, and names the Circle user behind its wallet. It
+         *     is not a credential: Circle signs nothing for it without the PIN its owner set in
+         *     Circle's own frame.
+         */
+        CircleSignIn: {
+            /** Sign In Id */
+            sign_in_id: string;
+        };
+        /**
+         * CircleSignInSession
+         * @description What Circle's frame needs to continue a sign-in with a Circle wallet.
+         */
+        CircleSignInSession: {
+            /** App Id */
+            app_id: string;
+            /** User Token */
+            user_token: string;
+            /** Encryption Key */
+            encryption_key: string;
+            /** Challenge Id */
+            challenge_id: string | null;
+            /** Address */
+            address: string | null;
+            /** Simulated */
+            simulated: boolean;
+        };
+        /**
+         * CircleSignInWallet
+         * @description A Circle sign-in wallet as it stands: its address once Circle has created it.
+         */
+        CircleSignInWallet: {
+            /** Address */
+            address: string | null;
+            /** Simulated */
+            simulated: boolean;
+        };
+        /** CircleSignRequest */
+        CircleSignRequest: {
+            /** Sign In Id */
+            sign_in_id: string;
+            /** Message */
+            message: string;
+        };
+        /**
+         * CircleSignature
+         * @description The answer to signing a sign-in message with a Circle wallet.
+         *
+         *     Live, Circle signs once its owner approves with their PIN, so this carries the
+         *     challenge for the frame to run and the signature comes back from the frame. In the
+         *     simulation no frame opens, and the signature is here.
+         */
+        CircleSignature: {
+            /** App Id */
+            app_id: string;
+            /** User Token */
+            user_token: string;
+            /** Encryption Key */
+            encryption_key: string;
+            /** Challenge Id */
+            challenge_id: string | null;
+            /** Signature */
+            signature: string | null;
+            /** Simulated */
+            simulated: boolean;
+        };
         /** Claim */
         Claim: {
             /** Contributor Id */
@@ -1434,6 +1596,12 @@ export interface components {
              * @description The callback URL to register on the GitHub OAuth App, from MISTHOS_PUBLIC_URL
              */
             github_oauth_callback_url: string;
+            /**
+             * Circle Sign In
+             * @description Whether a Circle wallet can be the way in (#181). The simulation signs for a made-up wallet and opens no frame; live, it needs the edge service, which MISTHOS_EDGE_CORE_TOKEN being set stands for.
+             * @default false
+             */
+            circle_sign_in: boolean;
         };
         /** IssueOut */
         IssueOut: {
@@ -1559,11 +1727,22 @@ export interface components {
             /** Github Url */
             github_url: string;
         };
-        /** MeOut */
+        /**
+         * MeOut
+         * @description Who is signed in, and how far through the sign-in gate they are (#181).
+         *
+         *     The gate's three steps read off this: signed in at all, a GitHub login (linked on
+         *     the account, or held while there is none), and an account, which is the side.
+         */
         MeOut: {
             /** Address */
             address: string;
             account: components["schemas"]["Account"] | null;
+            /**
+             * Pending Github Login
+             * @description A GitHub login linked before the side was chosen. The account adopts it when it is created, and from then on it is the account's github_login and this is null.
+             */
+            pending_github_login?: string | null;
         };
         /**
          * MetricsOut
@@ -2360,6 +2539,13 @@ export interface operations {
                     "application/json": components["schemas"]["Account"];
                 };
             };
+            /** @description This wallet already has a side; a side is chosen once */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -2388,6 +2574,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["GitHubLinkStart"];
                 };
+            };
+            /** @description No wallet is signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             /** @description The browser is on another address than GitHub returns to */
             409: {
@@ -2424,7 +2617,61 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["Account"];
+                    "application/json": components["schemas"]["MeOut"];
+                };
+            };
+            /** @description No wallet is signed in */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Not the simulation: link through GitHub */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The login is linked to another wallet, or being linked by one */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    circle_session_api_v1_auth_circle_session_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CircleSignIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CircleSignInSession"];
                 };
             };
             /** @description Validation Error */
@@ -2435,6 +2682,128 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+            /** @description The edge or Circle could not answer */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No edge is configured for Circle wallets; the detail says what to set */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    circle_wallet_api_v1_auth_circle_wallet_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CircleSignIn"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CircleSignInWallet"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description The edge or Circle could not answer */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No edge is configured for Circle wallets; the detail says what to set */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    circle_sign_api_v1_auth_circle_sign_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CircleSignRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CircleSignature"];
+                };
+            };
+            /** @description Not a sign-in message for this site, this wallet and a live nonce */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description The Circle wallet does not exist yet */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description The edge or Circle could not answer */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description No edge is configured for Circle wallets; the detail says what to set */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };

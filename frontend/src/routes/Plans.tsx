@@ -1,11 +1,11 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
 import { api, money, shortHash, shortTime, unwrap, type ApiError } from '../lib/client'
 import { browserProvider } from '../lib/eip1193'
 import { payFromWallet } from '../lib/pay'
 import { useHealth, useMe } from '../lib/session'
 import { Panel } from '../components/ui'
+import { GateLink } from '../components/SignInGate'
 
 /**
  * The plans and, for a signed-in publisher, buying one. Team is bought here without a
@@ -100,9 +100,9 @@ export default function Plans() {
             ? 'Plans are for publishers. This wallet is a contributor.'
             : 'Sign in as a publisher to choose a plan.'}{' '}
           {!account && (
-            <Link to="/account" style={{ textDecoration: 'underline' }}>
-              Go to your account
-            </Link>
+            <GateLink to="/account" style={{ textDecoration: 'underline' }}>
+              Sign in
+            </GateLink>
           )}
         </div>
       )}

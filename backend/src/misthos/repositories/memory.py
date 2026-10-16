@@ -59,6 +59,8 @@ class MemoryRepository:
             self._screenings: list[Screening] = []
             self._deliveries: dict[str, tuple[str, datetime]] = {}
             self._accounts: dict[str, Account] = {}
+            # Keyed by address: the login as GitHub spells it, and when it was held.
+            self._pending_logins: dict[str, tuple[str, datetime]] = {}
             self._subscriptions: dict[str, Subscription] = {}
             self._connections: dict[str, RepoConnection] = {}
             self._subscription_payments: list[SubscriptionPayment] = []
@@ -83,6 +85,7 @@ class MemoryRepository:
                 self._screenings
                 or self._deliveries
                 or self._accounts
+                or self._pending_logins
                 or self._subscriptions
                 or self._connections
                 or self._subscription_payments
@@ -226,14 +229,39 @@ class MemoryRepository:
 
     def save_account(self, account: Account) -> None:
         with self._guard:
-            if account.github_login and any(
-                other.github_login
-                and other.github_login.lower() == account.github_login.lower()
-                and other.address != account.address
-                for other in self._accounts.values()
-            ):
-                raise AccountConflict(f"{account.github_login} is linked to another wallet")
+            if account.github_login:
+                self._refuse_taken(account.address, account.github_login)
             self._accounts[account.address.lower()] = account.model_copy(deep=True)
+
+    def get_pending_github_login(self, address: str) -> str | None:
+        with self._guard:
+            held = self._pending_logins.get(address.lower())
+            return held[0] if held else None
+
+    def hold_github_login(self, address: str, login: str, at: datetime) -> None:
+        with self._guard:
+            self._refuse_taken(address, login)
+            self._pending_logins[address.lower()] = (login, at)
+
+    def drop_pending_github_login(self, address: str) -> None:
+        with self._guard:
+            self._pending_logins.pop(address.lower(), None)
+
+    def _refuse_taken(self, address: str, login: str) -> None:
+        """One login, one wallet: linked or held, and whatever its case. Under the guard."""
+        address, wanted = address.lower(), login.lower()
+        if any(
+            other.github_login
+            and other.github_login.lower() == wanted
+            and other.address.lower() != address
+            for other in self._accounts.values()
+        ):
+            raise AccountConflict(f"{login} is linked to another wallet")
+        if any(
+            held.lower() == wanted and holder != address
+            for holder, (held, _) in self._pending_logins.items()
+        ):
+            raise AccountConflict(f"{login} is being linked by another wallet")
 
     # ---------------------------------------------------------- deliveries
 

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { signInThroughTheGate } from './gate'
 
 /**
  * The acceptance-criteria box belongs to the issue it is showing.
@@ -22,13 +23,7 @@ function watchForErrors(page: Page, errors: string[]) {
 }
 
 async function onboardPublisher(page: Page, name: string, login: string) {
-  await page.goto('/account')
-  await page.getByRole('button', { name: 'Demo publisher wallet' }).click()
-  await page.getByLabel('Organisation name').fill(name)
-  await page.getByRole('button', { name: 'Continue as a publisher' }).click()
-  await page.getByLabel('GitHub login').fill(login)
-  await page.getByRole('button', { name: 'Link this login' }).click()
-  await expect(page.getByRole('link', { name: `publisher · ${login}` })).toBeVisible()
+  await signInThroughTheGate(page, 'publisher', login, name)
 }
 
 test('the criteria box follows the issue, not the previous page', async ({ page, request }) => {

@@ -1,28 +1,30 @@
 import { expect, test } from '@playwright/test'
+import { chooseSide, linkLogin, openTheGate } from './gate'
 
 /**
- * A contributor links the wallet their payouts are released to (#29).
+ * The wallet a party signs in with is the wallet its money moves through (#29, #181).
  *
- * In the simulation the session links a wallet straight away and Circle's frame never
- * opens; on Arc the same button runs the PIN challenge first. Either way the address
- * the API keeps is the one the wallet itself reported, for the account signed in.
+ * A Circle wallet is a way in rather than a second wallet set up afterwards, so the
+ * profile names the wallet signed in with and offers no other. In the simulation
+ * Circle's frame never opens; on Arc the same button runs the PIN challenge first.
  */
-test('a contributor links the wallet their payouts go to', async ({ page, request }) => {
+test('the wallet signed in with is the one the money moves through', async ({ page, request }) => {
   expect((await request.post('/api/v1/demo/reset')).ok()).toBe(true)
   const errors: string[] = []
   page.on('pageerror', (e) => errors.push(e.message))
 
-  await page.goto('/account')
-  await page.getByRole('button', { name: 'Demo contributor wallet' }).click()
-  await expect(page.getByRole('heading', { name: 'Choose your side' })).toBeVisible()
-  await page.getByLabel('Contributor: I fix issues').check()
-  await page.getByLabel('Your name').fill('Wallet Tester')
-  await page.getByRole('button', { name: 'Continue as a contributor' }).click()
+  const gate = await openTheGate(page)
+  await gate.getByRole('button', { name: 'Sign in with a Circle wallet' }).click()
+  await linkLogin(gate, 'wallet-tester')
+  await chooseSide(gate, 'contributor')
+  await expect(page).toHaveURL(/\/overview$/)
 
-  await expect(page.getByRole('heading', { name: 'Your Circle wallet' })).toBeVisible()
-  await expect(page.getByText('Your payouts are released to this wallet.')).toBeVisible()
-  await page.getByRole('button', { name: 'Set up or reconnect your wallet' }).click()
-  await expect(page.getByText('Your wallet is linked.')).toBeVisible()
+  const me = await (await page.request.get('/api/v1/auth/me')).json()
+  await page.goto('/account')
+  await expect(page.getByText('Your payouts are released to the wallet you signed in with.')).toBeVisible()
+  await expect(page.getByTitle(me.address)).toBeVisible()
+  // One wallet, so no panel offers to set up another.
+  await expect(page.getByRole('button', { name: 'Set up or reconnect your wallet' })).toHaveCount(0)
 
   expect(errors).toEqual([])
 })

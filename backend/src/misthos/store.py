@@ -2757,11 +2757,26 @@ class Store:
         budget_usdc: str = "5000",
         now: datetime | None = None,
     ) -> Account:
-        """A wallet's first sign-in: it becomes a publisher or a contributor, once."""
+        """A wallet's first sign-in: it becomes a publisher or a contributor, once.
+
+        A GitHub login the wallet linked before choosing (#181) is adopted onto the new
+        account. A contributor's handle is then that login, as `link_github` makes it.
+        """
         self.ensure_ready()
         address = address.lower()
+        # One side per wallet, even for two requests at once: without the hold both
+        # would find no account and each create a party.
+        with self.coordinator.lock(f"account:{address}", ISSUE_LOCK_TTL) as free:
+            if not free:
+                raise Busy(address)
+            return self._create_account(address, role, name, budget_usdc, now)
+
+    def _create_account(
+        self, address: str, role: str, name: str, budget_usdc: str, now: datetime | None
+    ) -> Account:
         if self.repo.get_account(address) is not None:
             raise AccountExists(f"{address} already has a role")
+        held = self.repo.get_pending_github_login(address)
         name = name.strip()
         if role == "publisher":
             try:
@@ -2784,7 +2799,7 @@ class Store:
             self.repo.save_contributor(
                 Contributor(
                     id=party_id,
-                    handle=name,
+                    handle=held or name,
                     wallet=Wallet(address=address, chain=settings.chain),
                     reputation=0,
                     settled_issues=0,
@@ -2792,14 +2807,48 @@ class Store:
                 )
             )
         account = Account(
-            address=address, role=role, party_id=party_id, created_at=now or _now()  # type: ignore[arg-type]
+            address=address,
+            role=role,  # type: ignore[arg-type]
+            party_id=party_id,
+            github_login=held,
+            created_at=now or _now(),
         )
         self.repo.save_account(account)
+        if held is not None:
+            # Only once the account carries it: until then the hold is what keeps the
+            # login this wallet's.
+            self.repo.drop_pending_github_login(address)
         return account
+
+    def pending_github_login(self, address: str) -> str | None:
+        """The login a wallet linked before choosing its side, until the account adopts it."""
+        self.ensure_ready()
+        return self.repo.get_pending_github_login(address.lower())
+
+    def hold_github_login(self, address: str, login: str, now: datetime | None = None) -> None:
+        """The sign-in gate's second step (#181): link a login, with or without a side.
+
+        A wallet that already has an account gets the login linked onto it, as
+        `link_github` links it. One without an account yet has it held until choosing a
+        side creates the account, which adopts it. Either way the login is this wallet's
+        from now on: a held login is refused to every other wallet with AccountConflict,
+        exactly as a linked one is.
+        """
+        self.ensure_ready()
+        address = address.lower()
+        with self._login_exclusive(login):
+            if self.repo.get_account(address) is not None:
+                self._link_github(address, login)
+                return
+            self.repo.hold_github_login(address, login, now or _now())
 
     def link_github(self, address: str, login: str) -> Account:
         """Link the wallet's GitHub account (#80). A contributor's handle is their login."""
         self.ensure_ready()
+        with self._login_exclusive(login):
+            return self._link_github(address.lower(), login)
+
+    def _link_github(self, address: str, login: str) -> Account:
         account = self.repo.get_account(address)
         if account is None:
             raise KeyError(address)
@@ -2810,6 +2859,20 @@ class Store:
             assert contributor is not None
             self.repo.save_contributor(contributor.model_copy(update={"handle": login}))
         return linked
+
+    @contextmanager
+    def _login_exclusive(self, login: str) -> Iterator[None]:
+        """Hold a GitHub login for one link, or refuse at once with Busy.
+
+        A login can be taken on two tables, linked on an account or held for a wallet
+        with none, and each write checks the other table before it lands. Two writes of
+        the same login to different tables, at the same moment, could each pass the
+        other's check; holding the login for the write makes them take turns.
+        """
+        with self.coordinator.lock(f"github-login:{login.lower()}", ISSUE_LOCK_TTL) as held:
+            if not held:
+                raise Busy(login)
+            yield
 
     # ------------------------------------------------------- explicit actions
 

@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { signInThroughTheGate } from './gate'
 
 /**
  * #53's definition of done: a Team subscription is bought without a conversation.
@@ -10,13 +11,8 @@ test('a publisher buys Team from the web app', async ({ page, request }) => {
   const errors: string[] = []
   page.on('pageerror', (e) => errors.push(e.message))
 
+  await signInThroughTheGate(page, 'publisher', 'initech', 'Initech')
   await page.goto('/account')
-  await page.getByRole('button', { name: 'Demo publisher wallet' }).click()
-  await page.getByLabel('Organisation name').fill('Initech')
-  await page.getByRole('button', { name: 'Continue as a publisher' }).click()
-  await page.getByLabel('GitHub login').fill('initech')
-  await page.getByRole('button', { name: 'Link this login' }).click()
-  await expect(page.getByRole('link', { name: 'publisher · initech' })).toBeVisible()
 
   // On Open, spend reporting answers with the plan that has it.
   await page.getByRole('link', { name: 'Your spend' }).click()

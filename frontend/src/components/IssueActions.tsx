@@ -1,6 +1,5 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
 import { api, money, unwrap, type IssueOut, type MeOut, type Publisher } from '../lib/client'
 import {
   MAX_CRITERION,
@@ -10,6 +9,7 @@ import {
 } from '../lib/criteria'
 import { MINIMUM_PRICE, contributorShare, parseAmount, platformFee } from '../lib/fee'
 import { fundFromWallet, type Wallet } from '../lib/fund'
+import { GateLink } from './SignInGate'
 
 function browserWallet(): Wallet | null {
   return (window as unknown as { ethereum?: Wallet }).ethereum ?? null
@@ -288,9 +288,9 @@ function SignInTo({
     <p className="dim">
       {children}{' '}
       {!signedIn && (
-        <Link to="/account" style={{ textDecoration: 'underline' }}>
+        <GateLink to="/account" style={{ textDecoration: 'underline' }}>
           Sign in to {what}.
-        </Link>
+        </GateLink>
       )}
     </p>
   )

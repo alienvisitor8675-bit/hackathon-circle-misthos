@@ -102,10 +102,22 @@ class Repository(Protocol):
     def get_account(self, address: str) -> Account | None: ...
 
     def save_account(self, account: Account) -> None:
-        """Create or update. A GitHub login already linked to another wallet is refused
-        with AccountConflict."""
+        """Create or update. A GitHub login already linked to another wallet, or held
+        for one (`hold_github_login`), is refused with AccountConflict."""
 
     def get_account_by_github_login(self, login: str) -> Account | None: ...
+
+    def get_pending_github_login(self, address: str) -> str | None:
+        """The login held for a wallet that has no account yet, as GitHub spells it."""
+
+    def hold_github_login(self, address: str, login: str, at: datetime) -> None:
+        """Hold a login for a wallet before its account exists (#181), replacing any
+        login it held before. A login linked to another wallet, or held for one, is
+        refused with AccountConflict: a pending link takes the one-login-one-wallet slot
+        as much as a finished one, whatever the case it is written in."""
+
+    def drop_pending_github_login(self, address: str) -> None:
+        """Forget the wallet's held login, once its account has adopted it."""
 
     def get_connection(self, repo: str) -> RepoConnection | None: ...
 

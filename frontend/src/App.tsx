@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { ArrowRight, ArrowUpRight } from 'lucide-react'
 import { api, type IssueOut } from './lib/client'
 import { useHealth, useMe } from './lib/session'
+import { GateProvider, useGate } from './components/SignInGate'
 import Dashboard from './routes/Dashboard'
 import Issues from './routes/Issues'
 import IssueDetail from './routes/IssueDetail'
@@ -13,7 +14,7 @@ import Plans from './routes/Plans'
 import Publish from './routes/Publish'
 import Spend from './routes/Spend'
 
-// Signing carries the curve arithmetic, so it loads only where someone signs in.
+// The profile loads on demand, as the sign-in gate's dialog does (components/SignInGate).
 const AccountPage = lazy(() => import('./routes/Account'))
 
 const REPO_URL = 'https://github.com/vanduc2514/hackathon-circle-misthos'
@@ -30,6 +31,7 @@ const moneyChip: Record<'simulated' | 'test' | 'real' | 'unknown', string> = {
 function Layout() {
   const { data: health } = useHealth()
   const { data: me } = useMe()
+  const gate = useGate()
   const account = me?.account ?? null
 
   return (
@@ -79,16 +81,15 @@ function Layout() {
               {moneyChip[health.money]}
             </span>
           )}
-          {me ? (
+          {/* The way in is the sign-in gate, the same one the landing page opens (#181). */}
+          {gate.finished && account ? (
             <Link to="/account" className="chip">
-              {account
-                ? `${account.role} · ${account.github_login ?? account.party_id}`
-                : 'Choose a side'}
+              {`${account.role} · ${account.github_login ?? account.party_id}`}
             </Link>
           ) : (
-            <Link to="/account" className="nav-cta">
-              Sign in <ArrowRight aria-hidden="true" />
-            </Link>
+            <button type="button" className="nav-cta" aria-haspopup="dialog" onClick={gate.open}>
+              {me ? 'Finish signing in' : 'Sign in'} <ArrowRight aria-hidden="true" />
+            </button>
           )}
         </div>
       </nav>
@@ -129,26 +130,28 @@ function NotFound() {
 
 export default function App() {
   return (
-    <Routes>
-      <Route index element={<Landing />} />
-      <Route element={<Layout />}>
-        <Route path="/overview" element={<Dashboard />} />
-        <Route path="/issues" element={<Issues />} />
-        <Route path="/issues/:issueId" element={<IssueDetail />} />
-        <Route path="/loop" element={<Loop />} />
-        <Route path="/spend" element={<Spend />} />
-        <Route path="/publish" element={<Publish />} />
-        <Route path="/plans" element={<Plans />} />
-        <Route
-          path="/account"
-          element={
-            <Suspense fallback={<div className="empty">Loading…</div>}>
-              <AccountPage />
-            </Suspense>
-          }
-        />
-        <Route path="*" element={<NotFound />} />
-      </Route>
-    </Routes>
+    <GateProvider>
+      <Routes>
+        <Route index element={<Landing />} />
+        <Route element={<Layout />}>
+          <Route path="/overview" element={<Dashboard />} />
+          <Route path="/issues" element={<Issues />} />
+          <Route path="/issues/:issueId" element={<IssueDetail />} />
+          <Route path="/loop" element={<Loop />} />
+          <Route path="/spend" element={<Spend />} />
+          <Route path="/publish" element={<Publish />} />
+          <Route path="/plans" element={<Plans />} />
+          <Route
+            path="/account"
+            element={
+              <Suspense fallback={<div className="empty">Loading…</div>}>
+                <AccountPage />
+              </Suspense>
+            }
+          />
+          <Route path="*" element={<NotFound />} />
+        </Route>
+      </Routes>
+    </GateProvider>
   )
 }

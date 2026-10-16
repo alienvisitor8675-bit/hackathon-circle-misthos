@@ -20,10 +20,22 @@
  * Spending policies are a developer-controlled and agent-wallet feature, and
  * mainnet only. The guardrail that holds here is MisthosEscrow's per-issue
  * ceiling: an issue cannot take more than the price a human approved.
+ *
+ * A Circle wallet is also a way to sign in (#181), which comes before any party
+ * exists. Those wallets are keyed by a random id the browser keeps, not by a party,
+ * and they are EOAs: the API checks a sign-in by recovering the address from an
+ * EIP-191 signature, and a smart account's EIP-1271 signature cannot be recovered.
+ *
+ *   1. `signInSession(id)` is `session` for that user, creating an EOA.
+ *   2. `signInWallet(id)` reads its address back, creating nothing.
+ *   3. `signInSignature(id, message)` asks Circle for a SIGN_MESSAGE challenge over
+ *      the sign-in message; the browser runs it, the user enters their PIN, and the
+ *      signature comes back from Circle's frame, never through here.
  */
 
 import { createHash } from 'node:crypto'
 import { initiateUserControlledWalletsClient } from '@circle-fin/user-controlled-wallets'
+import { privateKeyToAccount } from 'viem/accounts'
 import { simulatedFrom } from './simulated.js'
 
 export type Party = 'publisher' | 'contributor'
@@ -53,6 +65,19 @@ export interface WalletSession {
   simulated: boolean
 }
 
+export interface SignInChallenge {
+  appId: string
+  userToken: string
+  encryptionKey: string
+  /** Live: what the browser runs in Circle's frame to sign. Simulated: null. */
+  challengeId: string | null
+  /** Simulated only: the signature, since no frame opens and nobody holds the key. */
+  signature: string | null
+  address: string
+  blockchain: string
+  simulated: boolean
+}
+
 export interface PartyWallet {
   circleUserId: string
   address: string | null
@@ -75,6 +100,14 @@ export interface CircleUsers {
     userToken: string
     blockchain?: string
   }): Promise<{ data?: { wallets: { address: string; blockchain: string }[] } }>
+  signMessage(input: {
+    userToken: string
+    walletAddress: string
+    blockchain: string
+    message: string
+    encodedByHex: boolean
+    memo: string
+  }): Promise<{ data?: { challengeId: string } }>
 }
 
 /**
@@ -116,6 +149,28 @@ function simulatedAddress(userId: string): string {
   return `0x${createHash('sha256').update(userId).digest('hex').slice(0, 40)}`
 }
 
+const SIGN_IN_ID = /^[A-Za-z0-9_-]{16,64}$/
+
+/** The Circle user behind a sign-in with a Circle wallet, before any party exists. */
+export function signInUserId(id: string): string {
+  if (!SIGN_IN_ID.test(id)) throw new Error('invalid sign-in id')
+  return `misthos-signin-${id}`
+}
+
+/**
+ * The simulation's sign-in wallet: a key derived from the user id, as the API derives
+ * it (services/wallets.py), so the two agree on the address. Nobody holds it.
+ */
+function simulatedSignInAccount(userId: string) {
+  return privateKeyToAccount(`0x${createHash('sha256').update(userId).digest('hex')}`)
+}
+
+/** Only a sign-in message for the wallet that signs it is ever put in front of its owner. */
+function namesWallet(message: string, address: string): boolean {
+  const lines = message.replace(/\r\n/g, '\n').split('\n')
+  return lines.length > 1 && lines[1].toLowerCase() === address.toLowerCase()
+}
+
 function isUserExists(err: unknown): boolean {
   return typeof err === 'object' && err !== null && (err as { code?: unknown }).code === USER_EXISTS
 }
@@ -124,6 +179,9 @@ export interface WalletService {
   config: WalletConfig
   session(party: Party, id: string): Promise<WalletSession>
   wallet(party: Party, id: string): Promise<PartyWallet>
+  signInSession(id: string): Promise<WalletSession>
+  signInWallet(id: string): Promise<PartyWallet>
+  signInSignature(id: string, message: string): Promise<SignInChallenge>
 }
 
 export function createWalletService(
@@ -155,6 +213,44 @@ export function createWalletService(
           simulated: true,
         }
       },
+      signInSession: async (id) => {
+        const userId = signInUserId(id)
+        return {
+          circleUserId: userId,
+          appId: 'simulated',
+          userToken: 'simulated',
+          encryptionKey: 'simulated',
+          challengeId: null,
+          address: simulatedSignInAccount(userId).address.toLowerCase(),
+          blockchain: config.blockchain,
+          simulated: true,
+        }
+      },
+      signInWallet: async (id) => {
+        const userId = signInUserId(id)
+        return {
+          circleUserId: userId,
+          address: simulatedSignInAccount(userId).address.toLowerCase(),
+          blockchain: config.blockchain,
+          simulated: true,
+        }
+      },
+      signInSignature: async (id, message) => {
+        const account = simulatedSignInAccount(signInUserId(id))
+        if (!namesWallet(message, account.address)) {
+          throw new Error('invalid message: it names another wallet')
+        }
+        return {
+          appId: 'simulated',
+          userToken: 'simulated',
+          encryptionKey: 'simulated',
+          challengeId: null,
+          signature: await account.signMessage({ message }),
+          address: account.address.toLowerCase(),
+          blockchain: config.blockchain,
+          simulated: true,
+        }
+      },
     }
   }
 
@@ -173,36 +269,74 @@ export function createWalletService(
     return wallet?.address ?? null
   }
 
+  async function sessionFor(userId: string, accountType: 'SCA' | 'EOA'): Promise<WalletSession> {
+    try {
+      await circle.createUser({ userId })
+    } catch (err) {
+      if (!isUserExists(err)) throw err
+    }
+    const { userToken, encryptionKey } = await token(userId)
+    const address = await arcAddress(userToken)
+
+    let challengeId: string | null = null
+    if (address === null) {
+      const res = await circle.createUserPinWithWallets({
+        userToken,
+        blockchains: [config.blockchain],
+        accountType,
+      })
+      challengeId = res.data?.challengeId ?? null
+    }
+
+    return {
+      circleUserId: userId,
+      appId: config.appId,
+      userToken,
+      encryptionKey,
+      challengeId,
+      address,
+      blockchain: config.blockchain,
+      simulated: false,
+    }
+  }
+
   return {
     config,
-    async session(party, id) {
-      const userId = circleUserId(party, id)
-      try {
-        await circle.createUser({ userId })
-      } catch (err) {
-        if (!isUserExists(err)) throw err
-      }
-      const { userToken, encryptionKey } = await token(userId)
-      const address = await arcAddress(userToken)
-
-      let challengeId: string | null = null
-      if (address === null) {
-        // SCA so Circle's Gas Station can sponsor the first transaction; on Arc
-        // gas is USDC, and a new contributor should not need USDC to get paid.
-        const res = await circle.createUserPinWithWallets({
-          userToken,
-          blockchains: [config.blockchain],
-          accountType: 'SCA',
-        })
-        challengeId = res.data?.challengeId ?? null
-      }
-
+    // SCA so Circle's Gas Station can sponsor the first transaction; on Arc gas is
+    // USDC, and a new contributor should not need USDC to get paid.
+    session: (party, id) => sessionFor(circleUserId(party, id), 'SCA'),
+    // EOA, because signing in is checked by recovering the address from the signature.
+    signInSession: (id) => sessionFor(signInUserId(id), 'EOA'),
+    async signInWallet(id) {
+      const userId = signInUserId(id)
+      const { userToken } = await token(userId)
       return {
         circleUserId: userId,
+        address: await arcAddress(userToken),
+        blockchain: config.blockchain,
+        simulated: false,
+      }
+    },
+    async signInSignature(id, message) {
+      const { userToken, encryptionKey } = await token(signInUserId(id))
+      const address = await arcAddress(userToken)
+      if (address === null) throw new Error('invalid sign-in: the wallet is not created yet')
+      if (!namesWallet(message, address)) throw new Error('invalid message: it names another wallet')
+      const res = await circle.signMessage({
+        userToken,
+        walletAddress: address,
+        blockchain: config.blockchain,
+        message,
+        encodedByHex: false,
+        memo: 'Sign in to Misthos. This costs nothing and moves no money.',
+      })
+      if (!res.data?.challengeId) throw new Error('Circle returned no challenge to sign')
+      return {
         appId: config.appId,
         userToken,
         encryptionKey,
-        challengeId,
+        challengeId: res.data.challengeId,
+        signature: null,
         address,
         blockchain: config.blockchain,
         simulated: false,

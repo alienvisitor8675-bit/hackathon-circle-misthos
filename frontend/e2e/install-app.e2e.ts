@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { chooseSide, linkLogin, openTheGate, signInThroughTheGate, theGate, withDemoWallet } from './gate'
 
 /**
  * Installing the App is a repository action, and it comes after linking.
@@ -8,6 +9,9 @@ import { expect, test } from '@playwright/test'
  * nowhere before it. Installing authorizes nothing about the person, which is why the
  * flow that treated it as a sign-in is gone; the link is a plain install page with no
  * state on it.
+ *
+ * Signing in is the sign-in gate's now (#181), and installing is not one of its steps:
+ * the profile offers it, to a publisher, once the gate has linked the login.
  */
 test('installing the App is offered after linking, and is not a sign-in', async ({
   page,
@@ -17,21 +21,24 @@ test('installing the App is offered after linking, and is not a sign-in', async 
   const errors: string[] = []
   page.on('pageerror', (e) => errors.push(e.message))
 
+  // Halfway through the gate, a wallet and no login: the profile offers no install
+  // link, because that was the step order the old flow got wrong.
+  const gate = await openTheGate(page)
+  await withDemoWallet(gate, 'publisher')
+  await page.keyboard.press('Escape')
   await page.goto('/account')
-  await page.getByRole('button', { name: 'Demo publisher wallet' }).click()
-  await page.getByLabel('Organisation name').fill('Acme Widgets')
-  await page.getByRole('button', { name: 'Continue as a publisher' }).click()
-
-  // Before linking: no install link, because that was the step order the flow got wrong.
+  await expect(page.getByRole('heading', { name: 'Finish signing in' })).toBeVisible()
   await expect(page.getByRole('link', { name: /Install the GitHub App/ })).toHaveCount(0)
   await expect(page.getByText('Link without installing')).toHaveCount(0)
 
-  // Link the account, the way the simulation offers.
-  await page.getByLabel('Your GitHub login').fill('acme-widgets')
-  await page.getByRole('button', { name: 'Link this login' }).click()
+  // The profile finishes signing in through the gate, never a second form of its own.
+  await page.getByRole('button', { name: 'Finish signing in' }).first().click()
+  await linkLogin(theGate(page), 'acme-widgets')
+  await chooseSide(theGate(page), 'publisher', 'Acme Widgets')
   await expect(page.getByRole('link', { name: 'publisher · acme-widgets' })).toBeVisible()
 
-  // Now the install link is offered, and it is the App's plain install page.
+  // Now the profile offers the install link, and it is the App's plain install page.
+  await page.goto('/account')
   const install = page.getByRole('link', { name: /Install the GitHub App/ })
   await expect(install).toBeVisible()
   await expect(install).toHaveAttribute(
@@ -58,12 +65,8 @@ test('a connected repository turns the install button into the App settings', as
   const errors: string[] = []
   page.on('pageerror', (e) => errors.push(e.message))
 
+  await signInThroughTheGate(page, 'publisher', 'acme-widgets', 'Acme Widgets')
   await page.goto('/account')
-  await page.getByRole('button', { name: 'Demo publisher wallet' }).click()
-  await page.getByLabel('Organisation name').fill('Acme Widgets')
-  await page.getByRole('button', { name: 'Continue as a publisher' }).click()
-  await page.getByLabel('Your GitHub login').fill('acme-widgets')
-  await page.getByRole('button', { name: 'Link this login' }).click()
 
   // Nothing installed: the button installs.
   await expect(page.getByRole('link', { name: /Install the GitHub App/ })).toBeVisible()

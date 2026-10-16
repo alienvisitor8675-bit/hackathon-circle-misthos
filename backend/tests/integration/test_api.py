@@ -34,7 +34,7 @@ def sign_in(client: TestClient, seed: int, role: str, name: str, login: str) -> 
     assert account.status_code == 201, account.text
     linked = client.post(f"{API}/auth/github/simulate", json={"login": login})
     assert linked.status_code == 200, linked.text
-    return linked.json()
+    return linked.json()["account"]
 
 
 @pytest.fixture(autouse=True)

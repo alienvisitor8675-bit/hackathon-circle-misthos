@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test'
+import { signInThroughTheGate } from './gate'
 
 /**
  * #142: the publisher names the price, and the number they name is committed.
@@ -16,12 +17,7 @@ test('a publisher names the price, and that is what the escrow commits', async (
   const errors: string[] = []
   page.on('pageerror', (e) => errors.push(e.message))
 
-  await page.goto('/account')
-  await page.getByRole('button', { name: 'Demo publisher wallet' }).click()
-  await page.getByLabel('Organisation name').fill('Acme Ledger Co')
-  await page.getByRole('button', { name: 'Continue as a publisher' }).click()
-  await page.getByLabel('GitHub login').fill('acme-ledger')
-  await page.getByRole('button', { name: 'Link this login' }).click()
+  await signInThroughTheGate(page, 'publisher', 'acme-ledger', 'Acme Ledger Co')
 
   // A price the engine would not have suggested: the form takes it, and says what the
   // split will be before anything is published.
@@ -82,12 +78,7 @@ test('a price below the platform minimum is refused before anything is published
 }) => {
   expect((await request.post('/api/v1/demo/reset')).ok()).toBe(true)
 
-  await page.goto('/account')
-  await page.getByRole('button', { name: 'Demo publisher wallet' }).click()
-  await page.getByLabel('Organisation name').fill('Acme Ledger Co')
-  await page.getByRole('button', { name: 'Continue as a publisher' }).click()
-  await page.getByLabel('GitHub login').fill('acme-ledger')
-  await page.getByRole('button', { name: 'Link this login' }).click()
+  await signInThroughTheGate(page, 'publisher', 'acme-ledger', 'Acme Ledger Co')
 
   await page.getByRole('link', { name: 'Publish', exact: true }).click()
   await page.getByLabel('Repository').fill('acme/ledger-core')

@@ -291,6 +291,19 @@ accounts = Table(
     Column("created_at", Timestamp, nullable=False),
 )
 
+# A GitHub login linked by a wallet that has not chosen its side yet (#181). The sign-in
+# gate links GitHub before the account exists, so the login waits here until the side
+# is chosen and the account adopts it. `login_key` is the login lowercased: a login held
+# here is already one wallet's, whatever its case, as one on `accounts` is.
+pending_github_links = Table(
+    "pending_github_links",
+    metadata,
+    Column("address", String(42), primary_key=True),
+    Column("github_login", String(64), nullable=False),
+    Column("login_key", String(64), nullable=False, unique=True),
+    Column("held_at", Timestamp, nullable=False),
+)
+
 # Every GitHub webhook delivery handled, so a redelivery is recognised and ignored.
 webhook_deliveries = Table(
     "webhook_deliveries",

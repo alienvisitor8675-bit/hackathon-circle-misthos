@@ -121,8 +121,8 @@ MISTHOS_REDIS_URL=redis://localhost:6379/0 mise run dev:api
 ### Linking your real GitHub account locally
 
 Publishing and claiming need a linked GitHub login. With nothing configured the
-Account page says linking is not set up here, and the simulation takes a login you
-type instead. To link your real account:
+sign-in gate's GitHub step says linking is not set up here, and the simulation takes a
+login you type instead. To link your real account:
 
 1. Create a GitHub OAuth App at <https://github.com/settings/developers> (OAuth Apps,
    New OAuth App).
@@ -141,7 +141,8 @@ type instead. To link your real account:
 
 4. Restart `mise run dev`, open <http://localhost:5173> (not 127.0.0.1: GitHub returns
    to the address in `MISTHOS_PUBLIC_URL`, and your session lives on the one you
-   opened), sign in, choose a side and press **Link with GitHub**.
+   opened), press **Sign in**, sign in with a wallet and press **Link with GitHub**.
+   GitHub sends you back to the gate, which carries on with the side.
 
 ### Connecting a real repository
 
@@ -175,11 +176,62 @@ against a real repository.
 
 ### Signing in
 
-Outside the simulation nothing is written anonymously. A wallet signs in with a
-Sign-In with Ethereum message (`POST /api/v1/auth/nonce`, then `/auth/verify`), takes
-a role once, publisher or contributor (`/auth/role`), and links its GitHub account
-(`/auth/github/start`). A publisher acts only on its own issues, and a contributor
-submits only a pull request it opened. The loop then runs through explicit actions:
+There is one way into the app: the sign-in gate (#181). Every way in from the landing
+page — **Sign in**, **Plans**, an issue's row, **See every issue** — and the app's own
+**Sign in** open it while it is unfinished, and it asks for three things in this order:
+
+1. **A wallet.** MetaMask first, or a Circle wallet as the second way in; in the
+   simulation, the demo publisher and contributor wallets too. Either wallet signs the
+   same Sign-In with Ethereum message (`POST /api/v1/auth/nonce`, then `/auth/verify`),
+   and the API recovers the address from the signature the same way for both.
+2. **A GitHub account,** linked before the side is chosen (`/auth/github/start`, or a
+   typed login in the simulation). Until the account exists the login is held against
+   the wallet, and it is already that wallet's: another wallet linking it, pending or
+   complete, is refused with the conflict named.
+3. **A side,** publisher or contributor, chosen once (`/auth/role`). This creates the
+   account, which adopts the held login. A publisher names its organisation and a
+   budget; a contributor is known by its GitHub login.
+
+The gate then closes and the app opens at its overview. Leaving it early costs nothing:
+each step is kept by the API as soon as it is done, and reopening the gate starts at the
+first step that is not. While it is unfinished the landing page's header says **Finish
+signing in** rather than **Open the app**. The profile at `/account` shows who you are,
+the wallet the money moves through and a publisher's repositories, and sends you to the
+gate for anything missing.
+
+Through the API, in the simulation, the three steps look like this. `$SIGNED` is the
+body `{"message": …, "signature": …}` for that nonce: the message as `siweMessage` in
+`frontend/src/lib/siwe.ts` builds it, signed by the wallet it names.
+
+```bash
+api=http://localhost:5173/api/v1
+nonce=$(curl -s -c jar -X POST $api/auth/nonce | jq -r .nonce)
+curl -s -b jar -c jar -X POST $api/auth/verify \
+  -H 'Content-Type: application/json' -d "$SIGNED"           # step 1: a session
+curl -s -b jar -X POST $api/auth/github/simulate \
+  -H 'Content-Type: application/json' -d '{"login": "octo-dev"}'
+# {"address": "0x…", "account": null, "pending_github_login": "octo-dev"}
+curl -s -b jar -X POST $api/auth/role \
+  -H 'Content-Type: application/json' -d '{"role": "contributor", "name": "octo-dev"}'
+# {"address": "0x…", "role": "contributor", "party_id": "CON-…",
+#  "github_login": "octo-dev", "created_at": "…"}
+```
+
+A Circle wallet is the same step 1 by another door. `POST /auth/circle/session` with a
+random `sign_in_id` the browser keeps returns the Circle user's token and, the first
+time, the challenge that sets a PIN and creates the wallet in Circle's frame; once the
+wallet exists it returns its address, and `POST /auth/circle/wallet` reads that address
+back without asking Circle for anything new. `POST /auth/circle/sign` with the nonce's message
+naming that address returns a `SIGN_MESSAGE` challenge for the frame, and the signature
+the frame hands back goes to `/auth/verify` like MetaMask's. The route signs only a
+sign-in message for this site, with a nonce nobody has spent, naming that very wallet.
+In the simulation no frame opens and the API signs for a made-up wallet; live it needs
+the edge service (`MISTHOS_EDGE_CORE_TOKEN`, with `CIRCLE_API_KEY` and `CIRCLE_APP_ID` on
+the edge), and `/health` says whether it is set up as `circle_sign_in`.
+
+Outside the simulation nothing is written anonymously. A publisher acts only on its own
+issues, and a contributor submits only a pull request it opened. The loop then runs
+through explicit actions:
 
 | Who | Action | Endpoint |
 | --- | --- | --- |
@@ -198,7 +250,7 @@ without one the simulation links a typed login and a deployment links none. Set
 (`/advance` and `/complete`) runs only in the simulation, because it fabricates the
 pull request and the merge.
 
-The web app does all of this from **Account** and each issue's page, which shows
+The web app does all of this from the sign-in gate and each issue's page, which shows
 each party only the step that is theirs. In the simulation there is no need for a
 wallet extension: the demo publisher and contributor wallets are throwaway keys kept
 in the browser, and GitHub is simulated, so the contributor opens their pull request
