@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { signInThroughTheGate } from './gate'
 
 /**
  * #73's definition of done: a publisher and a contributor complete the loop from
@@ -28,17 +29,11 @@ function watchForErrors(page: Page, who: string, errors: string[]) {
   })
 }
 
+/** Through the sign-in gate (#181), a demo wallet, a typed login and the side, then on
+ * to the profile, where a contributor finds the funded issues. */
 async function onboard(page: Page, side: 'publisher' | 'contributor', name: string, login: string) {
+  await signInThroughTheGate(page, side, login, name)
   await page.goto('/account')
-  await page.getByRole('button', { name: `Demo ${side} wallet` }).click()
-  await expect(page.getByRole('heading', { name: 'Choose your side' })).toBeVisible()
-  if (side === 'contributor') await page.getByLabel('Contributor: I fix issues').check()
-  await page.getByLabel(side === 'publisher' ? 'Organisation name' : 'Your name').fill(name)
-  await page.getByRole('button', { name: `Continue as a ${side}` }).click()
-  await expect(page.getByRole('heading', { name: 'Link your GitHub account' })).toBeVisible()
-  await page.getByLabel('GitHub login').fill(login)
-  await page.getByRole('button', { name: 'Link this login' }).click()
-  await expect(page.getByRole('link', { name: `${side} · ${login}` })).toBeVisible()
 }
 
 test('a publisher and a contributor take an issue from publication to payment', async ({

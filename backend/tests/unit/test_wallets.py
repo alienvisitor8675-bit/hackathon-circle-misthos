@@ -203,3 +203,28 @@ class TestTheFlagTheEdgeReads:
         monkeypatch.setenv("MISTHOS_SIMULATED", value)
         with pytest.raises(ValidationError):
             Settings(_env_file=None)  # type: ignore[call-arg]
+
+
+class TestTheSimulatedCircleSignIn:
+    """The simulation's Circle sign-in wallet (#181) is derived the same way on both
+    sides, so a session the edge starts and a signature the API makes name one wallet.
+    edge/src/circle-wallets.test.ts pins the same address."""
+
+    SIGN_IN_ID = "browser-7f3a9c2e5b1d4e8f"
+
+    def test_the_api_derives_the_address_the_edge_derives(self) -> None:
+        from misthos.services.wallets import simulated_sign_in_address
+
+        assert simulated_sign_in_address(self.SIGN_IN_ID) == (
+            "0x6ac2b2e73846a141f2cb8885b54e777ccb5a1b7d"
+        )
+
+    def test_what_it_signs_recovers_to_that_address(self) -> None:
+        from misthos.auth.siwe import recover
+        from misthos.services.wallets import (
+            simulated_sign_in_address,
+            simulated_sign_in_signature,
+        )
+
+        signature = simulated_sign_in_signature(self.SIGN_IN_ID, "any message")
+        assert recover("any message", signature) == simulated_sign_in_address(self.SIGN_IN_ID)

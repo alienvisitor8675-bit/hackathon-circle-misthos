@@ -20,7 +20,7 @@ The diagrams below describe the target system. This table is what is actually in
 | Data | Postgres, Redis | Built and optional. Postgres once `MISTHOS_DATABASE_URL` is set, memory otherwise. Redis once `MISTHOS_REDIS_URL` is set, for the per-issue lock, idempotency keys and rate limits across processes |
 | Compliance | Screening, identity at first payout, statements | Built against simulated providers. See [PRIVACY.md](./PRIVACY.md) |
 | GitHub | App authentication, read path, write path, webhooks | Built behind one gateway. Simulated until `MISTHOS_GITHUB_APP_ID` and `MISTHOS_GITHUB_APP_PRIVATE_KEY` are set; `backend/github-app-manifest.json` registers the App |
-| Sign-in | Sign-In with Ethereum, a role per wallet, GitHub account linking, explicit lifecycle actions | Built. Linking is simulated until `MISTHOS_GITHUB_OAUTH_CLIENT_ID` is set. Outside the simulation every write needs a signed-in account |
+| Sign-in | One gate: a wallet (MetaMask or a Circle wallet), a GitHub account, then a role per wallet; explicit lifecycle actions | Built (#181). Linking is simulated until `MISTHOS_GITHUB_OAUTH_CLIENT_ID` is set, and a Circle wallet needs the edge outside the simulation. Outside the simulation every write needs a signed-in account |
 | Integrations | Circle wallets, Arc settlement | Arc settlement built behind the chain gateway (`services/chain/arc.py`), simulated by default; Circle wallet sessions built, the browser step pending |
 
 Everything marked not built has its interface in place, which is why the missing pieces are listed here as work rather than as risk.
@@ -579,7 +579,7 @@ flowchart TB
 
 ### Who may do what
 
-The line between T1 and T2 is a wallet signature. A wallet signs in with a Sign-In with Ethereum message (EIP-4361) that names this site's domain, an Arc chain and a single-use nonce, and the session is an HMAC-signed token in an HttpOnly, SameSite=Lax cookie, or a bearer header for an API client (`auth/`, #70). A wallet takes one role, publisher or contributor, and links one GitHub account through OAuth, keeping only the login (#80). The link is what ties a GitHub identity to a party: a publisher's issues and a contributor's pull requests must match it.
+The line between T1 and T2 is a wallet signature. A wallet signs in with a Sign-In with Ethereum message (EIP-4361) that names this site's domain, an Arc chain and a single-use nonce, and the session is an HMAC-signed token in an HttpOnly, SameSite=Lax cookie, or a bearer header for an API client (`auth/`, #70). A wallet takes one role, publisher or contributor, and links one GitHub account through OAuth, keeping only the login (#80). The link is what ties a GitHub identity to a party: a publisher's issues and a contributor's pull requests must match it. The sign-in gate links GitHub before the role is chosen (#181), so the login is held against the wallet in `pending_github_links` until choosing the role creates the account and adopts it; a held login takes the one-login-one-wallet slot exactly as a linked one does. A Circle wallet is a second way to sign in: an EOA, because the address is recovered from an EIP-191 signature and a smart account's EIP-1271 signature cannot be, which signs the same message through a `SIGN_MESSAGE` challenge in Circle's frame and is verified by the same `/auth/verify`.
 
 | Action | Who | Refused with |
 | --- | --- | --- |

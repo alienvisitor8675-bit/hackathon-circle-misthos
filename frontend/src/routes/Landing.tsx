@@ -16,6 +16,7 @@ import {
 import { api, type MetricsOut } from '../lib/client'
 import { useHealth, useMe } from '../lib/session'
 import LandingIssues from '../components/LandingIssues'
+import { useGate } from '../components/SignInGate'
 import '../landing.css'
 
 /**
@@ -148,17 +149,26 @@ function IssuePreview() {
   )
 }
 
-/** The way in: sign in, or straight to the app once signed in. */
+/**
+ * The way in: the sign-in gate until all three of its steps are done, and straight to
+ * the app after (#181). Halfway through it says so, rather than offering the app.
+ */
 function HeaderAction() {
   const { data: me } = useMe()
-  return me ? (
+  const gate = useGate()
+  return gate.finished ? (
     <Link className="nav-cta demo-preview-trigger" to="/overview">
       Open the app <ArrowRight aria-hidden="true" />
     </Link>
   ) : (
-    <Link className="nav-cta demo-preview-trigger" to="/account">
-      Sign in <ArrowRight aria-hidden="true" />
-    </Link>
+    <button
+      type="button"
+      className="nav-cta demo-preview-trigger"
+      aria-haspopup="dialog"
+      onClick={gate.open}
+    >
+      {me ? 'Finish signing in' : 'Sign in'} <ArrowRight aria-hidden="true" />
+    </button>
   )
 }
 

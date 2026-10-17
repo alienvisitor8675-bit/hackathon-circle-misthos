@@ -6,6 +6,7 @@ import { MINIMUM_PRICE, contributorShare, parseAmount, platformFee } from '../li
 import { parseRepoLink } from '../lib/repo-link'
 import { useHealth, useMe } from '../lib/session'
 import { Panel } from '../components/ui'
+import { GateLink } from '../components/SignInGate'
 
 /**
  * A publisher names a GitHub issue and the price they will pay for it, and gets its
@@ -101,9 +102,9 @@ export default function Publish() {
             : account?.role === 'contributor'
               ? 'This wallet is a contributor. Publishing needs a publisher wallet.'
               : 'Choose the publisher side and link your GitHub account first.'}{' '}
-          <Link to="/account" style={{ textDecoration: 'underline' }}>
+          <GateLink to="/account" style={{ textDecoration: 'underline' }}>
             Go to your account
-          </Link>
+          </GateLink>
         </div>
       ) : (
         <div className="form-stack">

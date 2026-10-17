@@ -1,5 +1,5 @@
 /**
- * How the Account page offers to link a GitHub account (#118).
+ * How the sign-in gate offers to link a GitHub account (#118, #181).
  *
  * "Link with GitHub" is offered only where the server has a GitHub OAuth App, because
  * anywhere else it can only fail. In the simulation without one, typing a login is the

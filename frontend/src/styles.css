@@ -184,6 +184,13 @@ code {
   transform: translateY(-1px);
 }
 
+/* While the sign-in gate is unfinished the way in opens it, so it is a button (#181). */
+button.nav-cta {
+  border: 0;
+  font-family: inherit;
+  cursor: pointer;
+}
+
 .nav-cta svg,
 .footer-link svg {
   width: 13px;

@@ -25,6 +25,29 @@ Notable changes to Misthos, newest first. The format follows
 
 ### Changed
 
+- **One way in: the sign-in gate** (#181). Signing in is a dialog in the landing page's
+  look that asks for a wallet, then a GitHub account, then a side, and opens the app at
+  `/overview` only when all three are done. Every way in from the landing page — *Sign
+  in*, *Plans*, an issue's row, *See every issue* — and the app's own *Sign in* open it
+  while it is unfinished, and the header says *Finish signing in* until then.
+  - **Two wallet doors.** MetaMask first, and a Circle wallet as the second way in. A
+    Circle wallet signs the same Sign-In with Ethereum message through a `SIGN_MESSAGE`
+    challenge (`POST /auth/circle/session`, `/auth/circle/wallet`, `/auth/circle/sign`), and
+    `/auth/verify` recovers its address exactly as it recovers MetaMask's. Its wallets
+    are EOAs, because a smart account's signature cannot be recovered. Without a wallet
+    extension the gate says so, and in the simulation no Circle frame opens.
+  - **GitHub before the side.** `POST /auth/github/start` and `/auth/github/simulate`
+    take a signed-in wallet with no account, and the login is held against it until
+    `POST /auth/role` creates the account, which adopts it. A held login is already one
+    wallet's: another wallet is refused it, pending or linked, with the conflict named.
+    `GET /auth/me` says which login is held, and GitHub's return lands on the gate,
+    which says why when the link was refused or not approved.
+  - **Leaving costs nothing.** Every step is kept by the API as it is done, and the gate
+    reopens at the first one that is not.
+  - **The profile is not a second sign-in.** `/account` shows who you are, the wallet
+    the money moves through and a publisher's repositories, and sends you to the gate
+    for anything missing. Its Circle wallet panel is gone: the wallet you sign in with is
+    the wallet the money moves through.
 - **The app wears the landing page's look** (#168, #169). Every page behind `/` is now light:
   white pages, black ink and buttons, Georgia headings and figures, and Arial text. The
   dark, mono, orange theme is gone.

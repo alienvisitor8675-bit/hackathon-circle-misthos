@@ -19,7 +19,12 @@ from sqlalchemy.exc import IntegrityError
 from misthos.domain.issue import IssueState
 from misthos.domain.money import Usdc
 from misthos.models import tables
-from misthos.repositories import AppendOnlyViolation, MemoryRepository, StaleIssue
+from misthos.repositories import (
+    AccountConflict,
+    AppendOnlyViolation,
+    MemoryRepository,
+    StaleIssue,
+)
 from misthos.repositories.sql import SqlRepository
 from misthos.schemas import Account, RepoConnection
 from misthos.store import Store
@@ -300,6 +305,60 @@ class TestGitHubConnections:
         # An empty list of removed repositories is not an uninstall.
         assert three.disconnect_repositories([], installation_id=42) == []
         assert self.repos(three) == ["acme/gears", "acme/widgets", "other/thing"]
+
+
+class TestPendingGitHubLinks:
+    """A login linked before the side is chosen (#181) is one wallet's while it waits."""
+
+    A, B = "0x" + "a1" * 20, "0x" + "b2" * 20
+
+    def account(self, address: str, login: str | None = None) -> Account:
+        return Account(
+            address=address, role="contributor", party_id="CON-9", github_login=login, created_at=AT
+        )
+
+    def test_a_held_login_is_found_by_its_wallet_as_github_spells_it(
+        self, every_store: Store
+    ) -> None:
+        every_store.repo.hold_github_login(self.A.upper().replace("0X", "0x"), "Ada-Dev", AT)
+        assert every_store.repo.get_pending_github_login(self.A) == "Ada-Dev"
+        assert every_store.repo.get_pending_github_login(self.B) is None
+
+    def test_a_login_another_wallet_holds_cannot_be_held_whatever_the_case(
+        self, every_store: Store
+    ) -> None:
+        every_store.repo.hold_github_login(self.A, "Ada-Dev", AT)
+        with pytest.raises(AccountConflict, match="being linked by another wallet"):
+            every_store.repo.hold_github_login(self.B, "ada-dev", AT)
+        assert every_store.repo.get_pending_github_login(self.B) is None
+
+    def test_a_login_another_wallet_holds_cannot_be_linked_to_an_account(
+        self, every_store: Store
+    ) -> None:
+        every_store.repo.hold_github_login(self.A, "ada-dev", AT)
+        with pytest.raises(AccountConflict):
+            every_store.repo.save_account(self.account(self.B, "Ada-Dev"))
+        assert every_store.repo.get_account(self.B) is None
+
+    def test_a_login_on_another_wallets_account_cannot_be_held(self, every_store: Store) -> None:
+        every_store.repo.save_account(self.account(self.A, "ada-dev"))
+        with pytest.raises(AccountConflict, match="linked to another wallet"):
+            every_store.repo.hold_github_login(self.B, "ADA-dev", AT)
+
+    def test_the_holder_itself_may_hold_again_link_it_and_let_it_go(
+        self, every_store: Store
+    ) -> None:
+        repo = every_store.repo
+        repo.hold_github_login(self.A, "ada-dev", AT)
+        repo.hold_github_login(self.A, "ada-dev", AT)  # GitHub's return, twice
+        repo.save_account(self.account(self.A, "ada-dev"))
+        repo.drop_pending_github_login(self.A)
+        assert repo.get_pending_github_login(self.A) is None
+        assert repo.get_account(self.A) == self.account(self.A, "ada-dev")
+
+    def test_a_held_login_survives_a_restart(self, database_url: str) -> None:
+        fresh(database_url).repo.hold_github_login(self.A, "ada-dev", AT)
+        assert Store(SqlRepository(database_url)).pending_github_login(self.A) == "ada-dev"
 
 
 class TestSchema:

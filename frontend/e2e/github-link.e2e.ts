@@ -1,12 +1,14 @@
 import { expect, test } from '@playwright/test'
+import { chooseSide, openTheGate, withDemoWallet } from './gate'
 
 /**
  * #118: on a fresh install there is no GitHub OAuth App, and "Link with GitHub" could
- * only answer "GitHub OAuth is not configured". The Account page no longer offers it
- * there. It says linking is not set up and what to set, and in the simulation a typed
- * login is the way to link rather than a form under a button that fails.
+ * only answer "GitHub OAuth is not configured". The sign-in gate's GitHub step (#181)
+ * does not offer it there. It says linking is not set up and what to set, and in the
+ * simulation a typed login is the way to link rather than a form under a button that
+ * fails. The login is linked before the side is chosen, and the account carries it.
  */
-test('without an OAuth App the page offers no GitHub button and links by login', async ({
+test('without an OAuth App the gate offers no GitHub button and links by login', async ({
   page,
   request,
 }) => {
@@ -16,26 +18,27 @@ test('without an OAuth App the page offers no GitHub button and links by login',
   const errors: string[] = []
   page.on('pageerror', (e) => errors.push(e.message))
 
-  await page.goto('/account')
-  await page.getByRole('button', { name: 'Demo contributor wallet' }).click()
-  await page.getByLabel('Contributor: I fix issues').check()
-  await page.getByLabel('Your name').fill('Octo')
-  await page.getByRole('button', { name: 'Continue as a contributor' }).click()
-  await expect(page.getByRole('heading', { name: 'Link your GitHub account' })).toBeVisible()
+  const gate = await openTheGate(page)
+  await withDemoWallet(gate, 'contributor')
 
-  await expect(page.getByRole('button', { name: 'Link with GitHub' })).toHaveCount(0)
-  const note = page.getByRole('note')
+  await expect(gate.getByRole('button', { name: 'Link with GitHub' })).toHaveCount(0)
+  const note = gate.getByRole('note')
   await expect(note).toContainText("GitHub linking isn't set up on this server")
   for (const needed of [
     'MISTHOS_GITHUB_OAUTH_CLIENT_ID',
     'MISTHOS_GITHUB_OAUTH_CLIENT_SECRET',
-    'http://localhost:5173/api/v1/auth/github/callback',
+    health.github_oauth_callback_url,
   ]) {
     await expect(note).toContainText(needed)
   }
 
-  await page.getByLabel('Your GitHub login').fill('octo-dev')
-  await page.getByRole('button', { name: 'Link this login' }).click()
+  await gate.getByLabel('Your GitHub login').fill('octo-dev')
+  await gate.getByRole('button', { name: 'Link this login' }).click()
+  // Linked before a side exists: the gate moves on to the side, and no account yet.
+  await expect(gate.getByRole('heading', { name: 'Choose your side' })).toBeVisible()
+  expect((await (await page.request.get('/api/v1/auth/me')).json()).account).toBeNull()
+
+  await chooseSide(gate, 'contributor')
   await expect(page.getByRole('link', { name: 'contributor · octo-dev' })).toBeVisible()
   expect(errors).toEqual([])
 })

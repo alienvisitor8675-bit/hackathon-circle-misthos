@@ -288,9 +288,40 @@ class SqlRepository:
         }
         try:
             with self.engine.begin() as conn:
+                if account.github_login:
+                    _refuse_taken(conn, account.address, account.github_login)
                 _upsert(conn, t.accounts, {"address": account.address.lower()}, values)
         except IntegrityError as exc:
             raise AccountConflict(f"{account.github_login} is linked to another wallet") from exc
+
+    def get_pending_github_login(self, address: str) -> str | None:
+        self.migrate()
+        with self.engine.connect() as conn:
+            return conn.execute(
+                select(t.pending_github_links.c.github_login).where(
+                    t.pending_github_links.c.address == address.lower()
+                )
+            ).scalar_one_or_none()
+
+    def hold_github_login(self, address: str, login: str, at: datetime) -> None:
+        self.migrate()
+        values = {"github_login": login, "login_key": login.lower(), "held_at": at}
+        try:
+            with self.engine.begin() as conn:
+                _refuse_taken(conn, address, login)
+                _upsert(conn, t.pending_github_links, {"address": address.lower()}, values)
+        except IntegrityError as exc:
+            # Another wallet held it between the check and the write.
+            raise AccountConflict(f"{login} is being linked by another wallet") from exc
+
+    def drop_pending_github_login(self, address: str) -> None:
+        self.migrate()
+        with self.engine.begin() as conn:
+            conn.execute(
+                delete(t.pending_github_links).where(
+                    t.pending_github_links.c.address == address.lower()
+                )
+            )
 
     # ---------------------------------------------------------- GitHub connections
 
@@ -719,6 +750,31 @@ def _upsert(conn: Connection, table: Any, key: dict[str, Any], values: dict[str,
     where = [table.c[k] == v for k, v in key.items()]
     if conn.execute(update(table).where(*where).values(**values)).rowcount == 0:
         conn.execute(insert(table).values(**key, **values))
+
+
+def _refuse_taken(conn: Connection, address: str, login: str) -> None:
+    """One login, one wallet: linked on an account or held for one, whatever its case.
+
+    Checked inside the writing transaction. The unique keys on both tables still catch
+    two writers racing on the same table; the store also holds the login for the write,
+    so a hold and a link of the same login on different tables do not interleave.
+    """
+    address, wanted = address.lower(), login.lower()
+    linked = conn.execute(
+        select(t.accounts.c.address).where(
+            func.lower(t.accounts.c.github_login) == wanted, t.accounts.c.address != address
+        )
+    ).first()
+    if linked is not None:
+        raise AccountConflict(f"{login} is linked to another wallet")
+    held = conn.execute(
+        select(t.pending_github_links.c.address).where(
+            t.pending_github_links.c.login_key == wanted,
+            t.pending_github_links.c.address != address,
+        )
+    ).first()
+    if held is not None:
+        raise AccountConflict(f"{login} is being linked by another wallet")
 
 
 def _exists(conn: Connection, table: Any, key: dict[str, Any]) -> bool:

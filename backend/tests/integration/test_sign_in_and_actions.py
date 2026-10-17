@@ -50,12 +50,13 @@ def sign_in(client: TestClient, wallet: Wallet) -> dict:
 
 
 def onboard(client: TestClient, wallet: Wallet, role: str, name: str, login: str) -> dict:
+    """Through the sign-in gate, in its order: a wallet, a GitHub login, then a side."""
     sign_in(client, wallet)
-    account = client.post(f"{API}/auth/role", json={"role": role, "name": name})
-    assert account.status_code == 201, account.text
     linked = client.post(f"{API}/auth/github/simulate", json={"login": login})
     assert linked.status_code == 200, linked.text
-    return linked.json()
+    account = client.post(f"{API}/auth/role", json={"role": role, "name": name})
+    assert account.status_code == 201, account.text
+    return account.json()
 
 
 class TestSignIn:
@@ -252,7 +253,8 @@ class TestLinkingARealGitHubAccount:
         )
 
         assert back.status_code == 303, back.text
-        assert back.headers["location"] == "http://localhost:5173/account?linked=github"
+        # Back to the gate, which carries on from where it was.
+        assert back.headers["location"] == "http://localhost:5173/?signin=continue"
         account = client.get(f"{API}/auth/me").json()["account"]
         assert account["github_login"] == "ada-real"
         contributor = store.get_contributor(account["party_id"])

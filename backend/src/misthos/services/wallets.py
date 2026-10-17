@@ -9,6 +9,13 @@ an address typed into a form.
 Simulated, no request leaves the process: each party gets a stable address
 derived from its id, the same derivation the edge uses, so the two agree.
 
+A Circle wallet is also a way in (#181). Signing in comes before any party exists, so
+those wallets are not keyed by a party but by a random id the browser keeps, and they
+are EOAs: the sign-in message is checked by recovering the address from an EIP-191
+signature, which a smart-contract account's EIP-1271 signature does not allow.
+Simulated, the wallet's key is derived from that id, as the edge derives it, and the
+signature is made here; nobody holds that key, and nothing it signs is worth anything.
+
 Live, the reply is checked before anything is kept. A simulated edge hands out those
 same derived addresses, which nobody holds a key for, and an edge configured for the
 other Arc network hands out a wallet the escrow never releases to. Both happened when
@@ -25,7 +32,9 @@ from dataclasses import dataclass
 from typing import Literal
 
 import httpx
+from coincurve import PrivateKey
 
+from misthos.auth import siwe
 from misthos.config import Settings
 from misthos.domain.network import ARC_MAINNET, ARC_TESTNET
 
@@ -57,6 +66,18 @@ class PartyWallet:
     simulated: bool
 
 
+@dataclass(frozen=True)
+class SignInSignature:
+    """A sign-in message's signature, or the challenge Circle's frame runs to make it."""
+
+    app_id: str
+    user_token: str
+    encryption_key: str
+    challenge_id: str | None
+    signature: str | None
+    simulated: bool
+
+
 class WalletUnavailable(RuntimeError):
     """The edge or Circle could not answer."""
 
@@ -78,6 +99,28 @@ def circle_user_id(party: Party, party_id: str) -> str:
 def simulated_address(party: Party, party_id: str) -> str:
     digest = hashlib.sha256(circle_user_id(party, party_id).encode()).hexdigest()
     return f"0x{digest[:40]}"
+
+
+def sign_in_user_id(sign_in_id: str) -> str:
+    """The Circle user behind a sign-in with a Circle wallet; no party exists yet."""
+    return f"misthos-signin-{sign_in_id}"
+
+
+def _simulated_sign_in_key(sign_in_id: str) -> PrivateKey:
+    return PrivateKey(hashlib.sha256(sign_in_user_id(sign_in_id).encode()).digest())
+
+
+def simulated_sign_in_address(sign_in_id: str) -> str:
+    """The simulation's Circle sign-in wallet, lowercase, as the edge derives it."""
+    return siwe.address_of(_simulated_sign_in_key(sign_in_id).public_key)
+
+
+def simulated_sign_in_signature(sign_in_id: str, message: str) -> str:
+    """What the simulation's Circle wallet signs: EIP-191, r ‖ s ‖ v, v = 27 + id."""
+    raw = _simulated_sign_in_key(sign_in_id).sign_recoverable(
+        siwe.personal_digest(message), hasher=None
+    )
+    return "0x" + (raw[:64] + bytes([raw[64] + 27])).hex()
 
 
 class Wallets:
@@ -130,6 +173,81 @@ class Wallets:
             simulated=False,
         )
 
+    async def sign_in_session(self, sign_in_id: str) -> WalletSession:
+        """Continue a sign-in with a Circle wallet: the user token, and the PIN and wallet
+        challenge while the wallet does not exist yet."""
+        if self.cfg.simulated:
+            return WalletSession(
+                circle_user_id=sign_in_user_id(sign_in_id),
+                app_id="simulated",
+                user_token="simulated",
+                encryption_key="simulated",
+                challenge_id=None,
+                address=simulated_sign_in_address(sign_in_id),
+                blockchain=self.blockchain,
+                simulated=True,
+            )
+        body = self._live(await self._call("POST", f"/wallets/sign-in/{sign_in_id}/session"))
+        address = body.get("address")
+        return WalletSession(
+            circle_user_id=body["circleUserId"],
+            app_id=body["appId"],
+            user_token=body["userToken"],
+            encryption_key=body["encryptionKey"],
+            challenge_id=body.get("challengeId"),
+            address=address.lower() if address else None,
+            blockchain=body["blockchain"],
+            simulated=False,
+        )
+
+    async def sign_in_wallet(self, sign_in_id: str) -> PartyWallet:
+        """The sign-in wallet's address, read only: no user, PIN or wallet is created."""
+        if self.cfg.simulated:
+            return PartyWallet(
+                circle_user_id=sign_in_user_id(sign_in_id),
+                address=simulated_sign_in_address(sign_in_id),
+                blockchain=self.blockchain,
+                simulated=True,
+            )
+        body = self._live(await self._call("GET", f"/wallets/sign-in/{sign_in_id}"))
+        address = body.get("address")
+        return PartyWallet(
+            circle_user_id=body["circleUserId"],
+            address=address.lower() if address else None,
+            blockchain=body["blockchain"],
+            simulated=False,
+        )
+
+    async def sign_in_signature(self, sign_in_id: str, message: str) -> SignInSignature:
+        """Have the Circle wallet sign a sign-in message.
+
+        Live, Circle answers with a challenge, and the signature is made in Circle's frame
+        once the wallet's owner enters their PIN. The platform never sees it before the
+        browser hands it to `POST /auth/verify`, which checks it like any other.
+        """
+        if self.cfg.simulated:
+            return SignInSignature(
+                app_id="simulated",
+                user_token="simulated",
+                encryption_key="simulated",
+                challenge_id=None,
+                signature=simulated_sign_in_signature(sign_in_id, message),
+                simulated=True,
+            )
+        body = self._live(
+            await self._call(
+                "POST", f"/wallets/sign-in/{sign_in_id}/sign", json={"message": message}
+            )
+        )
+        return SignInSignature(
+            app_id=body["appId"],
+            user_token=body["userToken"],
+            encryption_key=body["encryptionKey"],
+            challenge_id=body["challengeId"],
+            signature=None,
+            simulated=False,
+        )
+
     def _live(self, body: dict) -> dict:
         """The edge's reply, if it is a wallet this live API may keep."""
         simulated = body.get("simulated")
@@ -153,15 +271,15 @@ class Wallets:
             )
         return body
 
-    async def _call(self, method: str, path: str) -> dict:
+    async def _call(self, method: str, path: str, json: dict | None = None) -> dict:
         url = self.cfg.edge_url.rstrip("/") + path
         headers = {"X-Misthos-Core-Token": self.cfg.edge_core_token}
         try:
             if self.client is not None:
-                response = await self.client.request(method, url, headers=headers)
+                response = await self.client.request(method, url, headers=headers, json=json)
             else:
                 async with httpx.AsyncClient(timeout=15) as client:
-                    response = await client.request(method, url, headers=headers)
+                    response = await client.request(method, url, headers=headers, json=json)
         except httpx.HTTPError as exc:
             raise WalletUnavailable(f"edge unreachable: {exc}") from exc
         if response.status_code != 200:

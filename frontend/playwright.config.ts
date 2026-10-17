@@ -43,7 +43,7 @@ export default defineConfig({
         // away, even when a database is configured in backend/.env.
         MISTHOS_ALLOW_DEMO_RESET: 'true',
         // A fresh install has no GitHub OAuth App, which is what the browser tests
-        // check the Account page against, whatever backend/.env says.
+        // check the sign-in gate against, whatever backend/.env says.
         MISTHOS_GITHUB_OAUTH_CLIENT_ID: '',
         MISTHOS_GITHUB_OAUTH_CLIENT_SECRET: '',
         // The browser tests are written against the rule reviewer, whose verdict is

@@ -57,6 +57,31 @@ export function walletRouter(service: WalletService, coreToken = process.env.EDG
       }
     }
 
+  const signIn =
+    (op: (id: string, body: { message?: unknown }) => Promise<unknown>) =>
+    async (req: Request, res: Response) => {
+      try {
+        res.json(await op(String(req.params.id), (req.body ?? {}) as { message?: unknown }))
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err)
+        const status = message.startsWith('invalid ') ? 400 : 502
+        res.status(status).json({ error: message })
+      }
+    }
+
+  // A Circle wallet as the way in (#181): keyed by the browser's sign-in id, before any
+  // party exists. Registered before the party routes, which would take `sign-in` for one.
+  router.post('/sign-in/:id/session', signIn((id) => service.signInSession(id)))
+  router.get('/sign-in/:id', signIn((id) => service.signInWallet(id)))
+  router.post(
+    '/sign-in/:id/sign',
+    signIn((id, body) => {
+      if (typeof body.message !== 'string' || body.message.length > 4000) {
+        throw new Error('invalid message: send the sign-in message as text')
+      }
+      return service.signInSignature(id, body.message)
+    }),
+  )
   router.post('/:party/:id/session', run((p, id) => service.session(p, id)))
   router.get('/:party/:id', run((p, id) => service.wallet(p, id)))
   return router

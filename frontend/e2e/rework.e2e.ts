@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
+import { signInThroughTheGate } from './gate'
 
 /**
  * #119: after the publisher declines, the contributor could submit the same commit
@@ -7,16 +8,9 @@ import { expect, test, type Page } from '@playwright/test'
  * before it offers "Submit for review", and the new commit goes back into review.
  */
 
+/** Through the sign-in gate (#181): a demo wallet, a typed login, then the side. */
 async function onboard(page: Page, side: 'publisher' | 'contributor', name: string, login: string) {
-  await page.goto('/account')
-  await page.getByRole('button', { name: `Demo ${side} wallet` }).click()
-  await expect(page.getByRole('heading', { name: 'Choose your side' })).toBeVisible()
-  if (side === 'contributor') await page.getByLabel('Contributor: I fix issues').check()
-  await page.getByLabel(side === 'publisher' ? 'Organisation name' : 'Your name').fill(name)
-  await page.getByRole('button', { name: `Continue as a ${side}` }).click()
-  await page.getByLabel('GitHub login').fill(login)
-  await page.getByRole('button', { name: 'Link this login' }).click()
-  await expect(page.getByRole('link', { name: `${side} · ${login}` })).toBeVisible()
+  await signInThroughTheGate(page, side, login, name)
 }
 
 test('after a decline the same commit is not offered for review again; a new one is', async ({

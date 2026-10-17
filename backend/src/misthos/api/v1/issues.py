@@ -14,7 +14,7 @@ from misthos.api.session import (
     require_owner_or_simulation,
     require_role,
 )
-from misthos.api.v1.auth import callback_url, oauth_configured
+from misthos.api.v1.auth import callback_url, circle_sign_in_configured, oauth_configured
 from misthos.config import settings
 from misthos.domain.compliance import ComplianceRefusal
 from misthos.domain.escrow import approve_call, commit_call, issue_key
@@ -133,6 +133,7 @@ async def health() -> HealthOut:
         # The web app offers "Link with GitHub" only where it can work (#118).
         github_oauth=oauth_configured(),
         github_oauth_callback_url=callback_url(),
+        circle_sign_in=circle_sign_in_configured(),
     )
 
 

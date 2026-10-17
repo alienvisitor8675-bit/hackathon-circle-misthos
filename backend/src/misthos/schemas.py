@@ -429,17 +429,84 @@ class SessionOut(BaseModel):
 
 
 class MeOut(BaseModel):
+    """Who is signed in, and how far through the sign-in gate they are (#181).
+
+    The gate's three steps read off this: signed in at all, a GitHub login (linked on
+    the account, or held while there is none), and an account, which is the side.
+    """
+
     address: str
     account: Account | None
+    pending_github_login: str | None = Field(
+        default=None,
+        description=(
+            "A GitHub login linked before the side was chosen. The account adopts it when "
+            "it is created, and from then on it is the account's github_login and this is "
+            "null."
+        ),
+    )
 
 
 class RoleRequest(BaseModel):
     role: Role
     name: str = Field(min_length=1, max_length=200)
-    """The organisation's name for a publisher; a working handle for a contributor
-    until their GitHub account is linked."""
+    """The organisation's name for a publisher. A contributor's handle is their GitHub
+    login once one is linked, which the sign-in gate does before this step."""
     budget_usdc: str = "5000"
     """A publisher's declared budget, which caps every price it is offered."""
+
+
+class CircleSignIn(BaseModel):
+    """Which Circle sign-in this browser is continuing (#181).
+
+    The id is the browser's own, random, and names the Circle user behind its wallet. It
+    is not a credential: Circle signs nothing for it without the PIN its owner set in
+    Circle's own frame.
+    """
+
+    sign_in_id: str = Field(pattern=r"^[A-Za-z0-9_-]{16,64}$")
+
+
+class CircleSignRequest(CircleSignIn):
+    message: str = Field(max_length=4000)
+    """The sign-in message `POST /auth/nonce` described, naming this wallet's address."""
+
+
+class CircleSignInSession(BaseModel):
+    """What Circle's frame needs to continue a sign-in with a Circle wallet."""
+
+    app_id: str
+    user_token: str
+    encryption_key: str
+    challenge_id: str | None
+    """Set when the wallet does not exist yet: the PIN and wallet challenge to run."""
+    address: str | None
+    """The wallet's address, once it exists. This is the address the sign-in message
+    names and the address `POST /auth/verify` recovers."""
+    simulated: bool
+
+
+class CircleSignInWallet(BaseModel):
+    """A Circle sign-in wallet as it stands: its address once Circle has created it."""
+
+    address: str | None
+    simulated: bool
+
+
+class CircleSignature(BaseModel):
+    """The answer to signing a sign-in message with a Circle wallet.
+
+    Live, Circle signs once its owner approves with their PIN, so this carries the
+    challenge for the frame to run and the signature comes back from the frame. In the
+    simulation no frame opens, and the signature is here.
+    """
+
+    app_id: str
+    user_token: str
+    encryption_key: str
+    challenge_id: str | None
+    signature: str | None
+    simulated: bool
 
 
 class FundRequest(BaseModel):
@@ -591,6 +658,14 @@ class HealthOut(BaseModel):
     )
     github_oauth_callback_url: str = Field(
         description="The callback URL to register on the GitHub OAuth App, from MISTHOS_PUBLIC_URL"
+    )
+    circle_sign_in: bool = Field(
+        default=False,
+        description=(
+            "Whether a Circle wallet can be the way in (#181). The simulation signs for a "
+            "made-up wallet and opens no frame; live, it needs the edge service, which "
+            "MISTHOS_EDGE_CORE_TOKEN being set stands for."
+        ),
     )
 
 

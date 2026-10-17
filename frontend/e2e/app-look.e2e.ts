@@ -31,7 +31,7 @@ test('every app page is light, with the landing header and footer', async ({ pag
     await expect(nav).toContainText(health.network_label, { ignoreCase: true })
     await expect(nav).toContainText('simulated', { ignoreCase: true })
     await expect(page.locator('footer.footer')).toContainText(health.money_note)
-    // The Account page loads on demand, so wait for its heading before reading the type.
+    // The profile loads on demand, so wait for its heading before reading the type.
     await expect(page.locator('.page-title, .detail-title').first()).toBeVisible()
 
     const { background, headingFont } = await look(page)
