@@ -5,8 +5,8 @@ recording a failed screening raised `StringDataRightTruncation`. That turned eve
 funding and payout into a 500 whenever the list could not be read, which is exactly
 when the check has to be recorded and the money held.
 
-Revision ID: 0019
-Revises: 0018
+Revision ID: 0022
+Revises: 0021
 Create Date: 2026-10-18
 """
 
@@ -15,8 +15,8 @@ from __future__ import annotations
 import sqlalchemy as sa
 from alembic import op
 
-revision = "0019"
-down_revision = "0018"
+revision = "0022"
+down_revision = "0021"
 branch_labels = None
 depends_on = None
 
