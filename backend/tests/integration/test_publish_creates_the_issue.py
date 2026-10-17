@@ -56,6 +56,37 @@ def store_with(github: CreatingGitHub) -> Store:
     )
 
 
+def unseeded_store(github: CreatingGitHub) -> Store:
+    """A plain Store, as the API builds it.
+
+    The seeded test double subclasses Store and defines `_build` itself, which hid
+    a publish path that called a method only the fixture had (#207).
+    """
+    from misthos.schemas import Publisher, Wallet
+    from tests.support.fake_chain import FakeChain
+    from tests.support.fake_compliance import FakeIdentity, FakeScreening
+
+    store = Store(
+        MemoryRepository(),
+        github=github,
+        chain=FakeChain(),
+        screening=FakeScreening(),
+        identity=FakeIdentity(),
+    )
+    store.save_publisher(
+        Publisher(
+            id=PUBLISHER,
+            name="Acme Payments",
+            kind="company",
+            wallet=Wallet(
+                address="0xAcme00000000000000000000000000000000A1", chain="5042002"
+            ),
+            budget_remaining_usdc="1000.00",
+        )
+    )
+    return store
+
+
 def publish(store: Store, number: int | None = None) -> str:
     return store.publish(
         PublishRequest(
@@ -128,3 +159,17 @@ class TestPublishingDescription:
 
         assert github.created == []
         assert rec.number > 0
+
+
+class TestTheLiveStore:
+    def test_publishing_builds_a_listing_on_the_plain_store(self) -> None:
+        """The API runs a plain Store; only the test double used to have `_build`."""
+        github = CreatingGitHub()
+        service = unseeded_store(github)
+
+        rec = publish(service, number=412)
+
+        assert rec.repo == REPO
+        assert rec.number == 412
+        assert rec.publisher_id == PUBLISHER
+        assert service.find_open(REPO, 412) is not None

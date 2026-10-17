@@ -1348,6 +1348,60 @@ class Store:
         _observe_price(rec, "github" if facts is not None else "form", started)
         return rec
 
+    def _build(self, spec: dict) -> IssueRecord:
+        """The listing a publisher described, at the price they named.
+
+        Publishing is the only caller. The engine's reading of the issue is recorded
+        beside the publisher's number as advice, never as the amount that binds
+        (#142).
+        """
+        publisher = self.repo.get_publisher(spec["publisher_id"])
+        assert publisher is not None, spec["publisher_id"]
+        signals = ComplexitySignals(**spec["signals"])
+        proposal = propose(
+            signals,
+            compliance_driven=spec.get("compliance_driven", False),
+            # Settled issues of the same shape, from the platform's own history (#42).
+            comparables=self._comparables_for(signals, spec["repo"]),
+        )
+        rec = IssueRecord(
+            id=self._next_issue_id(),
+            repo=spec["repo"],
+            number=spec["number"],
+            title=spec["title"],
+            summary=spec["summary"],
+            state=IssueState(spec["state"]),
+            labels=spec["labels"],
+            compliance_driven=spec.get("compliance_driven", False),
+            acceptance_criteria=spec["criteria"],
+            publisher_id=spec["publisher_id"],
+            created_at=_now() - timedelta(days=spec["age_days"]),
+            proposal=proposal,
+            # Named by the publisher, or None on an issue the GitHub flow listed
+            # without one: it stays unpriced until they name a number (#142).
+            price=Usdc.from_decimal(spec["price"]) if spec.get("price") else None,
+        )
+        if spec.get("signals_read"):
+            self._log(
+                rec,
+                actor="agent",
+                action="signals_read",
+                rule="github_read_path",
+                outcome=spec["signals_read"],
+            )
+        self._log(
+            rec,
+            actor="agent",
+            action="price_suggested",
+            rule="complexity_score_v1",
+            outcome=(
+                f"suggested {proposal.recommended} for {proposal.estimated_hours}h; "
+                "advice only, the publisher's price is what binds"
+            ),
+            cost="0.00",
+        )
+        return rec
+
     def _refuse_listed(self, repo: str, number: int) -> None:
         existing = self.find_open(repo, number)
         if existing is not None:
