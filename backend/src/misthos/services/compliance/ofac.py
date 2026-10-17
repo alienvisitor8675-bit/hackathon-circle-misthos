@@ -43,9 +43,7 @@ class OfacSdnScreening:
         self._url = url
         self._refresh = refresh_seconds
         self._cache = (
-            Path(cache_path)
-            if cache_path
-            else Path(tempfile.gettempdir()) / "misthos-ofac-sdn.xml"
+            Path(cache_path) if cache_path else Path(tempfile.gettempdir()) / "misthos-ofac-sdn.xml"
         )
         self._transport = transport
         self._lock = threading.Lock()
@@ -81,7 +79,9 @@ class OfacSdnScreening:
 
     def _download(self) -> None:
         self._cache.parent.mkdir(parents=True, exist_ok=True)
-        with httpx.Client(transport=self._transport, timeout=60.0) as client:
+        # The treasury answers with a redirect to a signed object rather than the
+        # list itself, so a client that stops at 302 never reads the list.
+        with httpx.Client(transport=self._transport, timeout=60.0, follow_redirects=True) as client:
             response = client.get(self._url)
             response.raise_for_status()
             body = response.content

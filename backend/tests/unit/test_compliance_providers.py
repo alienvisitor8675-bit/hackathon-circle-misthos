@@ -46,6 +46,29 @@ def test_a_clean_address_is_clear(tmp_path: Path) -> None:
     assert provider.screen("0xclean")[0] is ScreeningOutcome.CLEAR
 
 
+def test_a_redirect_to_the_list_is_followed(tmp_path: Path) -> None:
+    """The treasury serves the list behind a redirect, so stopping at 302 blocks."""
+    provider = OfacSdnScreening(
+        "https://example.test/sdn.xml",
+        3600,
+        tmp_path / "sdn.xml",
+        transport=httpx.MockTransport(
+            lambda request: (
+                httpx.Response(
+                    status_code=302,
+                    headers={"Location": "https://example.test/signed/sdn.xml"},
+                )
+                if request.url.path == "/sdn.xml"
+                else httpx.Response(200, text=SDN)
+            )
+        ),
+    )
+
+    outcome, _ = provider.screen("1badaddress")
+
+    assert outcome is ScreeningOutcome.HIT
+
+
 def test_a_stale_list_that_cannot_be_refreshed_blocks(tmp_path: Path) -> None:
     path = cached(tmp_path)
     old = time.time() - 3600 * 2
@@ -87,3 +110,13 @@ def test_status_maps_stripes_vocabulary() -> None:
     ]:
         provider = StripeIdentity("sk_test", client=StubStripe({"status": stripe}))
         assert provider.status("vs_1") is ours, stripe
+
+
+def test_every_screening_outcome_fits_its_column() -> None:
+    """`unavailable` is eleven characters; the column was eight, which turned every
+    failed screening into a 500 on the funding path."""
+    from misthos.domain.compliance import ScreeningOutcome
+    from misthos.models import tables as t
+
+    width = t.screenings.c.outcome.type.length
+    assert max(len(outcome.value) for outcome in ScreeningOutcome) <= width

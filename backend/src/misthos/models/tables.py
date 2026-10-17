@@ -230,7 +230,7 @@ screenings = Table(
     Column("party_kind", String(16), nullable=False),
     Column("party_id", Id, nullable=False),
     Column("wallet_address", String(64), nullable=False),
-    Column("outcome", String(8), nullable=False),
+    Column("outcome", String(16), nullable=False),
     Column("list_name", String(64)),
     Column("provider", String(32), nullable=False),
     Column("reason", String(16), nullable=False),
