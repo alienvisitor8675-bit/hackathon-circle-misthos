@@ -297,6 +297,14 @@ corpus, by complexity band:
 mise run review:harness
 ```
 
+### The paid API
+
+Agents can buy read-only views of what Misthos knows, one call at a time, over x402:
+the edge answers `402` with the price in Arc testnet USDC, and a call paid through
+Circle Gateway Nanopayments gets its answer. A call that fails is not charged. `GET
+/paid` on the edge lists what is for sale. [docs/PAID-API.md](docs/PAID-API.md) covers
+how a call is paid, the free tier, and reconciling the books.
+
 ## License
 
 MIT. See [LICENSE](LICENSE).

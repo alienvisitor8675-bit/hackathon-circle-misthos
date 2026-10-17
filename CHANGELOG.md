@@ -5,8 +5,35 @@ Notable changes to Misthos, newest first. The format follows
 
 ## Unreleased
 
+### Added
+
+- **The paid API's rail** (#200, #201). The edge sells x402 calls from an allowlist,
+  `edge/src/catalog.ts`, and nothing else: anything under `/paid` it does not list is
+  `404`, and nothing wraps `/api/v1/*`. `GET /paid` is the catalog, free. See
+  [docs/PAID-API.md](docs/PAID-API.md).
+  - **A failed call is free.** The edge verifies the payment with Circle Gateway, has
+    the core answer, and settles only then; Circle's middleware settled first. A
+    settlement that fails withholds the answer.
+  - **A payment buys one request.** The same `PAYMENT-SIGNATURE` again gets the first
+    answer, marked `X-Misthos-Replayed`, without running or settling twice; on another
+    request it is `409 payment_already_used`.
+  - **Every settlement is on the books**: one `x402.settled` log line, and a row in the
+    core's new ledger of paid calls (migration `0019`), read back by
+    `GET /api/v1/internal/paid/calls` with totals per route and network to reconcile
+    with Gateway.
+  - **A free tier**: free-tier routes are free to an `EDGE_FREE_API_KEYS` key, or to a
+    signed-in session where the core's rule for the route says so.
+  - **Per-route prices**, each the catalog's default unless `EDGE_PRICES` names it.
+  - Long work answers `202` and a job, polled free with its receipt, and is settled when
+    the result is delivered, once. A job that fails is never charged.
+  - The core's paid routes live under `/api/v1/internal/paid/`, answer only the edge's
+    `X-Misthos-Core-Token` (404 to anyone else), and are not in the API schema.
+
 ### Removed
 
+- **`/paid/pricing-report`** (#201). It charged $0.25 for `/api/v1/metrics`, which is
+  free. The edge's `/health` no longer names the core's address, and an unreachable
+  core is `502 core_unavailable` with nothing else.
 - **Simulation is gone** (#184). `MISTHOS_SIMULATED`, `SimulatedChain`, the simulated
   billing rail, the demo endpoints and stepper, the seed, the demo wallets and the
   edge's simulated wallet service are deleted. A deployment that still sets the old

@@ -32,6 +32,7 @@ Outside the simulation, a publisher's remaining budget and spending policy are s
 | Sanctions screening results | Our database, append-only | Evidence that every payout was screened |
 | Payout records | Our database, as append-only money events, and the chain | Statements, reconciliation, the audit trail |
 | Decision log | Our database, append-only | The record that makes delegated authority defensible |
+| Paid calls: the route, a digest of the request, the paying wallet, the amount and Gateway's settlement reference | Our database, append-only (`paid_calls`), and the edge's log | To reconcile x402 income with Circle Gateway (#201). The payer is an agent's wallet; nothing links it to a handle or an account, and no response but the edge-only books carries it |
 
 Identity is verified at a contributor's first payout, never at signup. Claiming and submitting work need no identity step, so the cost lands only on people who actually get paid.
 
@@ -44,6 +45,7 @@ Identity is verified at a contributor's first payout, never at signup. Claiming 
 | Identity documents | The provider's own retention period, under its contract with us | The provider |
 | Payout records and annual statements | 7 years from the end of the tax year of the payout | Not automated yet |
 | Decision log | The life of the platform | Append-only by design; it holds handles, never wallets |
+| Paid calls | 7 years, as income records | Not automated yet |
 
 ## Statements
 

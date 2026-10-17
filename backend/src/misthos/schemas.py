@@ -718,3 +718,65 @@ class RepositoriesOut(BaseModel):
     GitHub's per-installation page is the only place a repository is added to or removed
     from an installation, so once something is connected this is what to offer instead
     of installing again. None when nothing is connected yet."""
+
+
+# ------------------------------------------------------------- paid API (#200)
+# What the edge and the core say to each other about x402 calls. None of this is
+# served to a buyer as is: the edge answers buyers, and these routes answer the edge.
+
+
+class PaidAccessAsked(BaseModel):
+    """Is this caller free on this paid route? Asked by the edge for a free-tier route."""
+
+    route: str = Field(max_length=64)
+    params: dict[str, str] = Field(default_factory=dict)
+    query: dict[str, str | list[str]] = Field(default_factory=dict)
+
+
+class PaidAccess(BaseModel):
+    free: bool
+    who: str | None = Field(
+        default=None,
+        description="The free caller as `role:party_id`, passed back on the call it makes",
+    )
+
+
+class PaidCallIn(BaseModel):
+    """One settlement, as the edge reports it once the call it paid for was answered."""
+
+    route: str = Field(min_length=1, max_length=64)
+    request_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    payer: str = Field(pattern=r"^0x[0-9a-fA-F]{40}$")
+    amount_base_units: int = Field(gt=0)
+    network: str = Field(pattern=r"^eip155:\d+$")
+    asset: str = Field(pattern=r"^0x[0-9a-fA-F]{40}$")
+    transaction: str = Field(min_length=1, max_length=128)
+    ref: str | None = Field(default=None, max_length=64)
+
+
+class PaidCallOut(BaseModel):
+    id: str
+    route: str
+    request_digest: str
+    payer: str
+    amount: dict[str, str | int]
+    network: str
+    asset: str
+    transaction: str
+    ref: str | None
+    settled_at: datetime
+
+
+class PaidRouteTotal(BaseModel):
+    route: str
+    network: str
+    calls: int
+    amount: dict[str, str | int]
+
+
+class PaidCallsOut(BaseModel):
+    """The books of paid calls, to reconcile with Circle Gateway's balance for the seller."""
+
+    calls: list[PaidCallOut]
+    totals: list[PaidRouteTotal]
+    total: dict[str, str | int]

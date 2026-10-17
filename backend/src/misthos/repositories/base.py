@@ -9,6 +9,7 @@ from typing import Protocol
 
 from misthos.domain.compliance import PartyKind, Screening
 from misthos.domain.issue import IssueState
+from misthos.domain.paid import PaidCall
 from misthos.models.records import IssueRecord
 from misthos.schemas import (
     Account,
@@ -115,6 +116,18 @@ class Repository(Protocol):
 
     def list_decisions(self, limit: int) -> list[Decision]:
         """The decision log across every issue, newest first."""
+
+    def record_paid_call(self, call: PaidCall) -> PaidCall:
+        """Append one settled x402 call (#201) and return the call on record. When the
+        same route, request and settlement are already recorded, nothing is written and
+        that call is returned: the edge may send a settlement twice."""
+
+    def get_paid_call(self, call_id: str) -> PaidCall | None: ...
+
+    def list_paid_calls(
+        self, *, since: datetime | None = None, route: str | None = None, limit: int = 500
+    ) -> list[PaidCall]:
+        """Settled calls, newest first."""
 
     def try_lock(self, name: str) -> AbstractContextManager[bool]:
         """Hold a named lock for the duration of the block if nobody else holds it.
