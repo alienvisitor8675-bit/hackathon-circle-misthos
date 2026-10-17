@@ -182,62 +182,6 @@ export default function PublicApi() {
             )
           })}
         </main>
-
-        <aside className="api-aside">
-          <section className="api-card">
-            <p className="api-card-kicker">No account required</p>
-            <h3>Read it like a public page.</h3>
-            <p>
-              Every endpoint on this page is anonymous. There is no key to rotate, no OAuth
-              handshake and nothing to sign for free data.
-            </p>
-            <pre>
-              <code>{`curl https://api.misthos.xyz/api/v1/issues`}</code>
-            </pre>
-          </section>
-
-          <section className="api-card tinted" id="x402">
-            <p className="api-card-kicker">x402 in three steps</p>
-            <ol className="api-steps">
-              <li>
-                <span>01</span>
-                <div>
-                  <b>Request</b>
-                  <p>Call the endpoint exactly like a free one.</p>
-                </div>
-              </li>
-              <li>
-                <span>02</span>
-                <div>
-                  <b>402 + price</b>
-                  <p>The response names the amount, token and address.</p>
-                </div>
-              </li>
-              <li>
-                <span>03</span>
-                <div>
-                  <b>Pay, retry</b>
-                  <p>Send the signed payment as <code>X-PAYMENT</code> and get the data.</p>
-                </div>
-              </li>
-            </ol>
-            <p className="api-footnote">
-              x402 is payment, not authentication. A paid call is still anonymous.
-            </p>
-          </section>
-
-          <section className="api-card">
-            <p className="api-card-kicker">Response shape</p>
-            <div className="api-shape">
-              <span>content-type</span>
-              <code>application/json</code>
-              <span>rate limit</span>
-              <code>120 req / min / IP</code>
-              <span>pagination</span>
-              <code>cursor</code>
-            </div>
-          </section>
-        </aside>
       </div>
     </div>
   )
