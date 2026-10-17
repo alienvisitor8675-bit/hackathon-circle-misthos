@@ -50,7 +50,6 @@ export default function Publish() {
       ),
   })
   const connected = repositories.data?.repositories ?? []
-  const label = repositories.data?.label ?? 'misthos'
 
   // The open issues in the chosen repository, with any listing they already have.
   const issues = useQuery({
@@ -230,11 +229,6 @@ export default function Publish() {
                           {chosen.listed_issue_id}
                         </Link>
                         .
-                      </span>
-                    )}
-                    {linked && (
-                      <span className="field-note">
-                        Linking marks it with the <code>{label}</code> label on GitHub.
                       </span>
                     )}
                   </label>
