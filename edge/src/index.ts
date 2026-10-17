@@ -4,9 +4,10 @@
  * This process exists for two reasons, both of which are TypeScript-only in
  * Circle's stack:
  *
- *   1. The x402 seller gate. Circle's Gateway Nanopayments middleware ships as
+ *   1. The x402 seller rail. Circle's Gateway Nanopayments client ships as
  *      `@circle-fin/x402-batching` for Node. Their own guidance for FastAPI and
- *      other non-Node APIs is a thin proxy in front, which is this file.
+ *      other non-Node APIs is a thin proxy in front, which is this file: the paid
+ *      routes in `catalog.ts`, each forwarded to the core's internal paid API.
  *   2. Agent wallet operations, which Circle documents around the Circle CLI.
  *
  * Keep it small. Anything that is not one of those two jobs belongs in the
@@ -14,7 +15,9 @@
  */
 
 import express, { type Request, type Response } from 'express'
-import { createGate, settlementOf } from './x402-gate.js'
+import { CATALOG } from './catalog.js'
+import { catalogOf, coreClient, freeApiKeys, paidRouter, prices } from './paid.js'
+import { createRail } from './x402-gate.js'
 import { walletStatus, type WalletOp } from './circle-cli.js'
 import { createWalletService } from './circle-wallets.js'
 import { walletRouter } from './wallet-routes.js'
@@ -35,36 +38,50 @@ app.use(express.json({ limit: '512kb' }))
 
 const PORT = Number(process.env.EDGE_PORT ?? 8080)
 const CORE_URL = process.env.CORE_API_URL ?? 'http://127.0.0.1:8000'
+const CORE_TOKEN = process.env.EDGE_CORE_TOKEN ?? ''
 warnLegacySwitch()
-const gate = createGate()
+const rail = createRail()
+const priced = prices(CATALOG)
+if (CATALOG.length > 0 && !CORE_TOKEN) {
+  throw new Error('EDGE_CORE_TOKEN is required: the paid routes run in the core, which only answers the edge')
+}
 
-/** Health, used by the compose file and by `mise run dev` sanity checks. */
+/** Health, used by the compose file and by `mise run dev` sanity checks. It names no
+ * internal address: the edge is public. */
 app.get('/health', (_req: Request, res: Response) => {
   res.json({
     status: 'ok',
     service: 'misthos-edge',
-    role: 'x402-gate',
-    core: CORE_URL,
-    networks: gate.config.networks,
-    facilitator: gate.config.facilitatorUrl,
+    role: 'x402-seller',
+    networks: rail.config.networks,
+    facilitator: rail.config.facilitatorUrl,
+    paid_routes: CATALOG.length,
   })
 })
 
+/** The seller page's data: every paid route, its price, and how to pay. Free. */
+app.get('/paid', async (_req: Request, res: Response) => {
+  res.json(await catalogOf(rail, CATALOG, priced))
+})
+
 /**
- * A metered endpoint. Unpaid, it answers 402 with the machine-readable price
- * list x402 specifies, so an agent can pick a rail, sign and retry. Paid, the
- * gate has already settled before this handler runs.
+ * The paid routes. Each answers 402 with the x402 price list until the request carries
+ * a payment, verifies it, runs the work in the core, and settles only if the work
+ * succeeded. Only what `catalog.ts` lists is served; nothing wraps `/api/v1/*`.
  */
-app.get('/paid/pricing-report', gate.require('0.25'), (_req: Request, res: Response) => {
-  const settlement = settlementOf(res)
-  // Forward the paid request to the Python core, which is unchanged by any of
-  // this. The gate is the only thing the edge service adds.
-  void fetch(`${CORE_URL}/api/v1/metrics`)
-    .then((r) => r.json())
-    .then((metrics) => res.json({ settled: true, ...settlement, metrics }))
-    .catch((err: unknown) =>
-      res.status(502).json({ error: 'core unavailable', detail: String(err) }),
-    )
+app.use(
+  paidRouter({
+    rail,
+    routes: CATALOG,
+    core: coreClient(CORE_URL, CORE_TOKEN),
+    prices: priced,
+    apiKeys: freeApiKeys(),
+  }),
+)
+
+/** Anything else under /paid is not for sale. */
+app.use('/paid', (_req: Request, res: Response) => {
+  res.status(404).json({ error: 'not_a_paid_route', catalog: '/paid' })
 })
 
 /**
@@ -99,10 +116,10 @@ app.post('/wallet/:op', async (req: Request, res: Response) => {
 if (process.env.NODE_ENV !== 'test') {
   app.listen(PORT, () => {
     console.log(`misthos-edge listening on http://localhost:${PORT}`)
-    console.log(`  core: ${CORE_URL}`)
     console.log(
-      `  x402 settles through ${gate.config.facilitatorUrl} on ${gate.config.networks.join(', ')}`,
+      `  x402 settles through ${rail.config.facilitatorUrl} on ${rail.config.networks.join(', ')}`,
     )
+    console.log(`  ${CATALOG.length} paid routes; the catalog is at /paid`)
   })
 }
 

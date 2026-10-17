@@ -49,6 +49,7 @@ from misthos.domain.compliance import (
 from misthos.domain.issue import FundingTerms, IssueState
 from misthos.domain.ledger import Divergence, MoneyEvent, MoneyEventKind, OnChain
 from misthos.domain.money import Usdc
+from misthos.domain.paid import PaidCall
 from misthos.domain.policy import (
     PolicyRefusal,
     SpendingPolicy,
@@ -1778,6 +1779,43 @@ class Store:
             for e in reputation.events(self.repo.list_issues())
             if e.contributor_id == contributor_id
         ]
+
+    # ----------------------------------------------------------- paid calls
+
+    def record_paid_call(
+        self,
+        *,
+        route: str,
+        request_digest: str,
+        payer: str,
+        amount: Usdc,
+        network: str,
+        asset: str,
+        transaction: str,
+        ref: str | None = None,
+        at: datetime | None = None,
+    ) -> tuple[PaidCall, bool]:
+        """Write down one settled x402 call (#201). The edge may send the same settlement
+        twice; the second is recognised, and the call on record is returned with False."""
+        call = PaidCall(
+            id=f"PAY-{self.repo.next_value('paid_call', 1):06d}",
+            route=route,
+            request_digest=request_digest,
+            payer=payer.lower(),
+            amount=amount,
+            network=network,
+            asset=asset,
+            transaction=transaction,
+            ref=ref,
+            settled_at=at or datetime.now(UTC),
+        )
+        kept = self.repo.record_paid_call(call)
+        return kept, kept.id == call.id
+
+    def list_paid_calls(
+        self, *, since: datetime | None = None, route: str | None = None, limit: int = 500
+    ) -> list[PaidCall]:
+        return self.repo.list_paid_calls(since=since, route=route, limit=limit)
 
     # ------------------------------------------------------------- accounts
 

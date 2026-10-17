@@ -13,7 +13,7 @@ The diagrams below describe the target system. This table is what is actually in
 | Layer | Component | State |
 | --- | --- | --- |
 | Web | Vite + React SPA, generated API client | Built. Sign-in, publishing and every lifecycle action, live against the API (#73); a Playwright test drives the whole loop in CI |
-| Edge | Express x402 gate and Circle CLI bridge | Built. The gate settles through Circle Gateway Nanopayments; it refuses to start without a seller address and Circle credentials |
+| Edge | Express x402 seller and Circle CLI bridge | Built. Paid routes are an allowlist (`edge/src/catalog.ts`), each verified, answered by the core, then settled through Circle Gateway Nanopayments, so a failed call is free ([PAID-API.md](./PAID-API.md)). It refuses to start without a seller address |
 | Core | FastAPI, lifecycle, pricing engine, review agent, decision log, money ledger | Built. Money moves through the deployed escrow. The review agent is Claude once `MISTHOS_ANTHROPIC_API_KEY` is set, and a rule reviewer otherwise |
 | Worker | Sweeper: claim expiry, deadline refunds, silent-publisher release | Built. Runs inside the API by default, or alone as `python -m misthos.workers` |
 | Contracts | `MisthosEscrow` | Built. Example, fuzz and invariant tests (#35) |
@@ -158,8 +158,8 @@ The frontend holds no business rules. It renders state and calls endpoints, whic
 
 | Component | Responsibility | Notes |
 | --- | --- | --- |
-| `edge/` | The x402 seller gate and the Circle CLI bridge | Express, TypeScript |
-| x402 gate | Answers an unpaid request with `402` and a machine-readable `accepts` array, then settles and forwards | Circle's Gateway Nanopayments middleware ships as `@circle-fin/x402-batching`. Their own guidance for FastAPI and other non-Node APIs is a thin proxy in front, which is this process |
+| `edge/` | The x402 seller and the Circle CLI bridge | Express, TypeScript |
+| x402 seller | Answers an unpaid request with `402` and a machine-readable `accepts` array; verifies a payment, has the core answer, and settles only then | Circle's Gateway client ships as `@circle-fin/x402-batching`. Their own guidance for FastAPI and other non-Node APIs is a thin proxy in front, which is this process. The routes it sells are listed in `catalog.ts` and run in the core under `/api/v1/internal/paid/`, which only the edge's token opens. See [PAID-API.md](./PAID-API.md) |
 | Wallet bridge | Runs agent wallet operations | Agent wallets are documented around the Circle CLI, a Node package |
 
 This process exists for exactly two reasons and both are Node-only dependencies. Anything else that lands here belongs in the core instead.
@@ -336,7 +336,7 @@ flowchart LR
 
 **Path A carries the work payment.** A publisher commits USDC into `MisthosEscrow` against a specific issue. The contract holds it. On acceptance it releases to the contributor with the platform's take rate carved out of the same commitment, on deadline it refunds in full. This is the path that satisfies C1, because the platform is never a custodian, and C7, because an Arc transfer costs about a cent.
 
-**Path B carries everything metered.** Paying our own review agents per invocation, a publisher buying a pricing report, or any endpoint we expose for agents to consume. No escrow, no commitment, no state. The agent pays per request and gets a result.
+**Path B carries everything metered.** Read-only views an agent buys per call: the decision log, a reputation, an escrow attestation, a price, a pre-flight review (#200). No escrow, no commitment, no state. The agent pays per request and gets a result, and a request that fails is not charged: the edge verifies the payment, has the core answer, and settles only then. Every settlement is recorded in the core's ledger of paid calls and reconciled against Gateway. See [PAID-API.md](./PAID-API.md).
 
 The reason to keep them apart is that escrow and nanopayments want different things from an account. Gateway Nanopayments and x402 batch settlement require EOA signatures and do not support ERC-1271, while escrow wants contract logic. Forcing one mechanism to do both jobs would mean either giving up programmable release or giving up batched settlement.
 
@@ -660,7 +660,7 @@ Inference is roughly nine hundred times the settlement cost. Any optimisation ef
 | # | Decision | Rationale | Reversibility |
 | --- | --- | --- | --- |
 | ADR-1 | Escrow funds live in a contract on Arc, never in a platform account | Removes custody, removes the failure mode that bankrupted the previous attempt in this category | Hard. This is the trust story |
-| ADR-2 | Two settlement paths: escrowed work payments, x402 for metered calls | Each mechanism is good at one job, and both are available. Forcing one to do both would cost programmable release or batched settlement | Medium |
+| ADR-2 | Two settlement paths: escrowed work payments, x402 for metered calls. Path B sells reads only, from an allowlist, and settles after the work succeeds (#201) | Each mechanism is good at one job, and both are available. Forcing one to do both would cost programmable release or batched settlement. Settling after the work means a failed call costs the buyer nothing; Gateway's `exact`-only scheme means a variable cost is sold at a cap | Medium |
 | ADR-3 | Fixed price set before publication, no bidding | See [06 The pricing engine](./misthos/06-pricing-engine.md). A price round rewards the least careful bidder | Medium |
 | ADR-4 | The review agent decides, and the publisher's merge is the only human signature on release | C2, and the hackathon's own framing of where an agent's authority must stop | Superseded: the human second opinion was a third party with a fee, and it cost more than it bought |
 | ADR-5 | GitHub only | One integration done deeply beats three done shallowly. Acceptance criteria can read the project's own test suite | Medium |

@@ -38,6 +38,7 @@ from misthos.domain.compliance import (
 from misthos.domain.issue import FundingTerms, IssueState
 from misthos.domain.ledger import MoneyEvent, MoneyEventKind
 from misthos.domain.money import Usdc, format_usdc
+from misthos.domain.paid import PaidCall
 from misthos.domain.pricing import PriceProposal
 from misthos.models import tables as t
 from misthos.models.records import IssueRecord
@@ -389,6 +390,60 @@ class SqlRepository:
         )
         with self.engine.connect() as conn:
             return [_decision(r) for r in conn.execute(query).mappings()]
+
+    # ---------------------------------------------------------- paid calls
+
+    def record_paid_call(self, call: PaidCall) -> PaidCall:
+        self.migrate()
+        try:
+            with self.engine.begin() as conn:
+                conn.execute(
+                    insert(t.paid_calls).values(
+                        id=call.id,
+                        route=call.route,
+                        request_digest=call.request_digest,
+                        payer=call.payer,
+                        amount_base_units=call.amount.base_units,
+                        network=call.network,
+                        asset=call.asset,
+                        transaction=call.transaction,
+                        ref=call.ref,
+                        settled_at=call.settled_at,
+                    )
+                )
+        except IntegrityError:
+            query = select(t.paid_calls).where(
+                t.paid_calls.c.route == call.route,
+                t.paid_calls.c.request_digest == call.request_digest,
+                t.paid_calls.c.transaction == call.transaction,
+            )
+            with self.engine.connect() as conn:
+                row = conn.execute(query).mappings().first()
+            if row is None:
+                raise
+            return _paid_call(row)
+        return call
+
+    def get_paid_call(self, call_id: str) -> PaidCall | None:
+        self.migrate()
+        with self.engine.connect() as conn:
+            query = select(t.paid_calls).where(t.paid_calls.c.id == call_id)
+            row = conn.execute(query).mappings().first()
+        return _paid_call(row) if row else None
+
+    def list_paid_calls(
+        self, *, since: datetime | None = None, route: str | None = None, limit: int = 500
+    ) -> list[PaidCall]:
+        self.migrate()
+        query = select(t.paid_calls)
+        if since is not None:
+            query = query.where(t.paid_calls.c.settled_at >= since)
+        if route is not None:
+            query = query.where(t.paid_calls.c.route == route)
+        newest = (t.paid_calls.c.settled_at.desc(), t.paid_calls.c.id.desc())
+        query = query.order_by(*newest).limit(limit)
+        with self.engine.connect() as conn:
+            return [_paid_call(r) for r in conn.execute(query).mappings()]
 
     @contextmanager
     def try_lock(self, name: str) -> Iterator[bool]:
@@ -991,4 +1046,19 @@ def _money_event(row: Row) -> MoneyEvent:
         counterparty_id=row["counterparty_id"],
         tx_hash=row["tx_hash"],
         occurred_at=_utc(row["occurred_at"]),
+    )
+
+
+def _paid_call(row: Row) -> PaidCall:
+    return PaidCall(
+        id=row["id"],
+        route=row["route"],
+        request_digest=row["request_digest"],
+        payer=row["payer"],
+        amount=Usdc(int(row["amount_base_units"])),
+        network=row["network"],
+        asset=row["asset"],
+        transaction=row["transaction"],
+        ref=row["ref"],
+        settled_at=_utc(row["settled_at"]),
     )

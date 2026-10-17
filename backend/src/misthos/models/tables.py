@@ -254,6 +254,27 @@ money_events = Table(
     UniqueConstraint("issue_id", "position"),
 )
 
+# Every x402 call an agent paid for and the edge settled (#201), one row per settlement,
+# appended and never edited. Reconciled against Circle Gateway, which is the authority
+# on what was paid; see domain/paid.py. The payer is an agent's wallet and nothing here
+# names a person.
+paid_calls = Table(
+    "paid_calls",
+    metadata,
+    Column("id", Id, primary_key=True),
+    Column("route", String(64), nullable=False),
+    Column("request_digest", String(64), nullable=False),
+    Column("payer", String(64), nullable=False),
+    Column("amount_base_units", BigInteger, nullable=False),
+    Column("network", String(32), nullable=False),
+    Column("asset", String(64), nullable=False),
+    Column("transaction", String(128), nullable=False),
+    Column("ref", String(64)),
+    Column("settled_at", Timestamp, nullable=False),
+    UniqueConstraint("route", "request_digest", "transaction"),
+    Index("ix_paid_calls_settled", "settled_at"),
+)
+
 # A signed-in wallet and the role it chose (#70). One role per wallet.
 accounts = Table(
     "accounts",

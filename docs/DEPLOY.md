@@ -23,7 +23,7 @@ docker compose up --build
 | `web` | The web app, served by nginx, which proxies `/api`, `/docs` and `/openapi.json` | http://localhost:5173 |
 | `api` | FastAPI, with the sweeper switched off | http://127.0.0.1:8000 (localhost only) |
 | `worker` | `python -m misthos.workers`: timers, reviews, re-screening, reconciliation | metrics at http://127.0.0.1:9100/metrics (localhost only), `worker:9100` inside the network |
-| `edge` | The x402 gate and the Circle CLI bridge | http://localhost:8080 |
+| `edge` | The x402 seller (the paid API, [PAID-API.md](./PAID-API.md)) and the Circle CLI bridge | http://localhost:8080 |
 | `postgres` | State, durable in the `pgdata` volume | inside the network |
 | `redis` | The per-issue lock, idempotency keys and rate limits | inside the network |
 
@@ -38,6 +38,11 @@ Pass real integrations through from your shell or a `.env` file next to
 `MISTHOS_SESSION_SECRET`, `MISTHOS_GITHUB_OAUTH_CLIENT_ID` and
 `MISTHOS_GITHUB_OAUTH_CLIENT_SECRET`. Every other setting is in
 `backend/.env.example`.
+
+The edge sells x402 calls. It needs `MISTHOS_SELLER_ADDRESS`, the address paid, and
+`MISTHOS_EDGE_CORE_TOKEN`, which compose hands to both the edge and the API: the paid
+routes run in the API behind that token. `EDGE_PRICES` overrides a route's price and
+`EDGE_FREE_API_KEYS` lets a caller through free. See [PAID-API.md](./PAID-API.md).
 
 ### Observing it
 

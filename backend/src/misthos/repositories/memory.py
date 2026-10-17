@@ -15,6 +15,7 @@ from datetime import datetime
 
 from misthos.domain.compliance import PartyKind, Screening
 from misthos.domain.issue import IssueState
+from misthos.domain.paid import PaidCall
 from misthos.models.records import IssueRecord
 from misthos.repositories.base import (
     AccountConflict,
@@ -44,6 +45,7 @@ class MemoryRepository:
         self._accounts: dict[str, Account] = {}
         self._pending_logins: dict[str, tuple[str, datetime]] = {}
         self._connections: dict[str, RepoConnection] = {}
+        self._paid_calls: list[PaidCall] = []
 
     def next_value(self, counter: str, start: int) -> int:
         with self._guard:
@@ -225,6 +227,33 @@ class MemoryRepository:
             rows = [d for r in self._issues.values() for d in r.decisions]
         rows.sort(key=lambda d: d.created_at, reverse=True)
         return [d.model_copy() for d in rows[:limit]]
+
+    # ---------------------------------------------------------- paid calls
+
+    def record_paid_call(self, call: PaidCall) -> PaidCall:
+        with self._guard:
+            key = (call.route, call.request_digest, call.transaction)
+            for kept in self._paid_calls:
+                if (kept.route, kept.request_digest, kept.transaction) == key:
+                    return kept
+            self._paid_calls.append(call)
+            return call
+
+    def get_paid_call(self, call_id: str) -> PaidCall | None:
+        with self._guard:
+            return next((c for c in self._paid_calls if c.id == call_id), None)
+
+    def list_paid_calls(
+        self, *, since: datetime | None = None, route: str | None = None, limit: int = 500
+    ) -> list[PaidCall]:
+        with self._guard:
+            rows = [
+                c
+                for c in self._paid_calls
+                if (since is None or c.settled_at >= since) and (route is None or c.route == route)
+            ]
+        rows.sort(key=lambda c: (c.settled_at, c.id), reverse=True)
+        return rows[:limit]
 
     @contextmanager
     def try_lock(self, name: str) -> Iterator[bool]:

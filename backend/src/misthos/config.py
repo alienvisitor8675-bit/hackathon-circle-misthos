@@ -52,8 +52,9 @@ class Settings(BaseSettings):
     # The App's slug on github.com, for the web app's "install on a repository" link.
     github_app_slug: str = ""
     circle_api_key: str = ""
-    # The edge service holds the Circle wallet SDK. The token proves a call came
-    # from the core; the edge refuses wallet routes without it.
+    # The edge service holds the Circle wallet SDK and sells the paid API. The token
+    # proves a call came from the core, and one to the core came from the edge: the
+    # edge refuses wallet routes without it, and the internal paid routes answer 404.
     edge_url: str = "http://127.0.0.1:8080"
     edge_core_token: str = ""
 

@@ -29,6 +29,8 @@ x-backend: &backend
     MISTHOS_GITHUB_OAUTH_CLIENT_ID: ${MISTHOS_GITHUB_OAUTH_CLIENT_ID:-}
     MISTHOS_GITHUB_OAUTH_CLIENT_SECRET: ${MISTHOS_GITHUB_OAUTH_CLIENT_SECRET:-}
     MISTHOS_GITHUB_APP_SLUG: ${MISTHOS_GITHUB_APP_SLUG:-}
+    # Shared with the edge: the paid API's routes in the core answer only the edge.
+    MISTHOS_EDGE_CORE_TOKEN: ${MISTHOS_EDGE_CORE_TOKEN:-}
     # Reset deletes every row of the database above, so it stays refused unless you
     # opt in for a demo you mean to throw away.
   depends_on:
@@ -127,6 +129,11 @@ services:
       GATEWAY_FACILITATOR_URL: ${GATEWAY_FACILITATOR_URL:-}
       GATEWAY_NETWORKS: ${GATEWAY_NETWORKS:-}
       EDGE_CONFIRM_MAINNET: ${EDGE_CONFIRM_MAINNET:-}
+      # The paid API (docs/PAID-API.md): the token the core trusts, price overrides,
+      # and API keys that call free.
+      EDGE_CORE_TOKEN: ${MISTHOS_EDGE_CORE_TOKEN:-}
+      EDGE_PRICES: ${EDGE_PRICES:-}
+      EDGE_FREE_API_KEYS: ${EDGE_FREE_API_KEYS:-}
     ports:
       - "8080:8080"
     depends_on:
