@@ -12,6 +12,21 @@ from misthos.domain.compliance import IdentityStatus, ScreeningOutcome
 from misthos.services.compliance.ofac import OfacSdnScreening
 from misthos.services.compliance.stripe_identity import StripeIdentity
 
+NAMESPACED_SDN = """<?xml version="1.0" standalone="yes"?>
+<sdnList xmlns="https://sanctionslistservice.ofac.treas.gov/api/PublicationPreview/exports/XML">
+  <sdnEntry>
+    <firstName>Bad</firstName>
+    <lastName>Actor</lastName>
+    <idList>
+      <id>
+        <idType>Digital Currency Address - XBT</idType>
+        <idNumber>1BadAddress</idNumber>
+      </id>
+    </idList>
+  </sdnEntry>
+</sdnList>
+"""
+
 SDN = """<?xml version="1.0"?>
 <sdnList>
   <sdnEntry>
@@ -67,6 +82,19 @@ def test_a_redirect_to_the_list_is_followed(tmp_path: Path) -> None:
     outcome, _ = provider.screen("1badaddress")
 
     assert outcome is ScreeningOutcome.HIT
+
+
+def test_the_lists_default_namespace_does_not_hide_every_entry(tmp_path: Path) -> None:
+    """The published document is namespaced; matching bare tags parses it to nothing,
+    which would clear every wallet."""
+    path = tmp_path / "sdn.xml"
+    path.write_text(NAMESPACED_SDN)
+    provider = OfacSdnScreening("https://example.test/sdn.xml", 3600, path)
+
+    outcome, list_name = provider.screen("1badaddress")
+
+    assert outcome is ScreeningOutcome.HIT
+    assert list_name and "Bad Actor" in list_name
 
 
 def test_a_stale_list_that_cannot_be_refreshed_blocks(tmp_path: Path) -> None:

@@ -93,23 +93,47 @@ class OfacSdnScreening:
         temporary.replace(self._cache)
 
 
+def _local(tag: str) -> str:
+    """An element's name without the namespace the treasury wraps the list in."""
+    return tag.rsplit("}", 1)[-1]
+
+
 def _parse(path: Path) -> dict[str, str]:
-    """Every digital-currency address in the list, mapped to the entry's name."""
+    """Every digital-currency address in the list, mapped to the entry's name.
+
+    The document carries a default namespace, so a tag never compares equal to the
+    bare name. Matching on the local name is what keeps the list from parsing to
+    nothing, which would clear every wallet.
+    """
     try:
         root = ET.parse(path).getroot()
     except (OSError, ET.ParseError) as exc:
         raise OfacSdnError(f"could not parse {path}: {exc}") from exc
 
     listed: dict[str, str] = {}
-    for entry in root.iter("sdnEntry"):
-        first = (entry.findtext("firstName") or "").strip()
-        last = (entry.findtext("lastName") or "").strip()
-        name = " ".join(part for part in (first, last) if part) or "unnamed entry"
-        for identifier in entry.iter("id"):
-            kind = (identifier.findtext("idType") or "").strip()
-            if not kind.startswith(DIGITAL_CURRENCY):
+    for entry in root.iter():
+        if _local(entry.tag) != "sdnEntry":
+            continue
+        parts: dict[str, str] = {}
+        for child in entry:
+            name = _local(child.tag)
+            if name in ("firstName", "lastName"):
+                parts[name] = (child.text or "").strip()
+        display = (
+            " ".join(part for part in (parts.get("firstName"), parts.get("lastName")) if part)
+            or "unnamed entry"
+        )
+        for node in entry.iter():
+            if _local(node.tag) != "id":
                 continue
-            address = (identifier.findtext("idNumber") or "").strip().lower()
-            if address:
-                listed[address] = name
+            kind = ""
+            number = ""
+            for child in node:
+                name = _local(child.tag)
+                if name == "idType":
+                    kind = (child.text or "").strip()
+                elif name == "idNumber":
+                    number = (child.text or "").strip()
+            if kind.startswith(DIGITAL_CURRENCY) and number:
+                listed[number.lower()] = display
     return listed
