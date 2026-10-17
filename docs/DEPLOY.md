@@ -220,10 +220,11 @@ contributes. Money settles on Arc testnet as section 3 describes.
    1. Open an issue and add the `misthos` label. The App replies with what comparable
       work settled for, the reasoning and the drafted criteria, and asks the publisher
       to name the price with `/misthos price 250`. Nothing is funded until they do.
-      Or publish it from the web app instead: **Publish** takes `owner/name` or a
-      pasted GitHub link, a price, and leaving the issue number **empty opens a new
-      issue** in that repository with the title and description. A number the publisher
-      gives is listed without creating anything.
+      Or publish it from the web app instead: **Publish** lists the repositories the
+      App is installed on and the open issues in the chosen one. Picking an issue
+      lists it and adds the `misthos` label to it on GitHub. **Create new issue**
+      opens a new issue in that repository with the title, description and labels
+      typed there. Either way the publisher names the price.
    2. The publisher comments `/misthos price 250` to name the amount if the web form did
       not, then `/misthos approve`, or `/misthos criteria` and a list first; all of them
       can go in one comment, each on its own line, and they run in order. The App posts

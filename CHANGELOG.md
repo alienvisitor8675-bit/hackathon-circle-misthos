@@ -37,6 +37,13 @@ Notable changes to Misthos, newest first. The format follows
 
 ### Changed
 
+- **Publish from connected repositories and issues** (#199). The publish form no
+  longer takes an `owner/name` and an issue number as free text. It offers the
+  publisher's connected repositories, then the open issues in the chosen one; pulling
+  one lists that GitHub issue and adds the platform label to it, so the label-driven
+  flow prices the same issue. Creating an issue is a button that reveals the title,
+  description and labels fields, and creation applies the platform label too. The
+  price field and the pricing flow are unchanged.
 - **One way in: the sign-in gate** (#181). Signing in is a dialog in the landing page's
   look that asks for a wallet, then a GitHub account, then a side, and opens the app at
   `/overview` only when all three are done. Every way in from the landing page — *Sign

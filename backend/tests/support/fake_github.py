@@ -9,13 +9,14 @@ the signals it was given, which is how the seeded demo stays as it was.
 from __future__ import annotations
 
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from misthos.domain.review import ChangedFile
 from misthos.domain.signals import IssueFacts
 from misthos.services.github.base import (
     GitHubError,
     Installation,
+    OpenIssue,
     PullRequest,
     ReviewEvent,
     StatusState,
@@ -78,6 +79,28 @@ class FakeGitHub:
     def read_issue(self, repo: str, number: int) -> IssueFacts | None:
         return self.issues.get((repo.lower(), number))
 
+    def open_issues(self, repo: str, limit: int = 100) -> list[OpenIssue]:
+        wanted = repo.lower()
+        with self._guard:
+            found = sorted(
+                (
+                    facts
+                    for (name, _), facts in self.issues.items()
+                    if name == wanted
+                ),
+                key=lambda facts: facts.number,
+            )
+        return [
+            OpenIssue(
+                repo=facts.repo,
+                number=facts.number,
+                title=facts.title,
+                labels=facts.labels,
+                url=f"https://github.com/{facts.repo}/issues/{facts.number}",
+            )
+            for facts in found[:limit]
+        ]
+
     def read_pull_request(self, repo: str, number: int) -> PullRequest:
         found = self.pulls.get((repo.lower(), number))
         if found is None:
@@ -101,6 +124,17 @@ class FakeGitHub:
     def create_issue(self, repo: str, title: str, body: str, labels: list[str]) -> int:
         """Refused: the simulation has no repository of its own to open one in."""
         raise GitHubError(f"the simulated GitHub holds no repository {repo} to open an issue in")
+
+    def add_labels(self, repo: str, number: int, labels: list[str]) -> None:
+        if not labels:
+            return
+        self._send(Sent("labels", repo, str(number), ",".join(labels)))
+        key = (repo.lower(), number)
+        with self._guard:
+            facts = self.issues.get(key)
+            if facts is not None:
+                merged = tuple(dict.fromkeys([*facts.labels, *labels]))
+                self.issues[key] = replace(facts, labels=merged)
 
     def review(self, repo: str, number: int, head_sha: str, event: ReviewEvent, body: str) -> None:
         self._send(Sent("review", repo, str(number), body, state=event.value))
