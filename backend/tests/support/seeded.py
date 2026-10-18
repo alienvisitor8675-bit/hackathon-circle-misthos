@@ -66,14 +66,14 @@ class SeededStore(Store):
         """
         self.ensure_ready()
         current = self.repo.get_issue(issue_id)
-        if (
-            current is not None
-            and current.state is IssueState.IN_REVIEW
-            and timers.due(self._clocks(current), _now()) is None
-        ):
-            # The step is the review agent's verdict, which may take minutes and so
-            # runs outside the issue's lock.
-            return self.review(issue_id) or self.get(issue_id) or current
+        if current is not None and current.state is IssueState.IN_REVIEW:
+            if timers.due(self._clocks(current), _now()) is not None:
+                with self._exclusive(issue_id), self._posting():
+                    return self._advance(issue_id)
+            if not self._passing(current):
+                # The step is the review agent's verdict, which may take minutes and so
+                # runs outside the issue's lock.
+                return self.review(issue_id) or self.get(issue_id) or current
         with self._exclusive(issue_id), self._posting():
             return self._advance(issue_id)
 
@@ -110,27 +110,49 @@ class SeededStore(Store):
                     outcome=f"{self._handle(cid)} claimed the issue",
                 )
             case IssueState.CLAIMED:
-                self._submit(
-                    rec,
-                    {
-                        "pr_number": self._demo_pull_request_number(rec),
-                        "head_sha": f"{random.getrandbits(160):040x}",
-                        "checks_passed": True,
-                        "files_changed": 3,
-                        "additions": 62,
-                        "deletions": 14,
-                    },
-                )
-                assert rec.submission is not None
-                self._fabricate_files(rec)
-                self._log(
-                    rec,
-                    actor="contributor",
-                    action="submitted",
-                    rule="pull_request_opened",
-                    outcome=f"opened PR #{rec.submission.pr_number} with checks passing",
-                )
-            case IssueState.ACCEPTED if rec.accepted_by is None:
+                if rec.submission is None:
+                    self._submit(
+                        rec,
+                        {
+                            "pr_number": self._demo_pull_request_number(rec),
+                            "head_sha": f"{random.getrandbits(160):040x}",
+                            "checks_passed": True,
+                            "files_changed": 3,
+                            "additions": 62,
+                            "deletions": 14,
+                        },
+                    )
+                    assert rec.submission is not None
+                    self._fabricate_files(rec)
+                    self._log(
+                        rec,
+                        actor="contributor",
+                        action="submitted",
+                        rule="pull_request_opened",
+                        outcome=f"opened PR #{rec.submission.pr_number} with checks passing",
+                    )
+                else:
+                    self._submit(
+                        rec,
+                        {
+                            "pr_number": rec.submission.pr_number,
+                            "head_sha": f"{random.getrandbits(160):040x}",
+                            "checks_passed": True,
+                            "files_changed": 4,
+                            "additions": 88,
+                            "deletions": 21,
+                        },
+                    )
+                    assert rec.submission is not None
+                    self._fabricate_files(rec)
+                    self._log(
+                        rec,
+                        actor="contributor",
+                        action="resubmitted",
+                        rule="pull_request_synchronized",
+                        outcome=f"pushed a new commit to PR #{rec.submission.pr_number}",
+                    )
+            case IssueState.IN_REVIEW if rec.accepted_by is None:
                 # Merging is acceptance, and acceptance is what releases the money,
                 # so the merge goes on the record before the release does.
                 self._log(
@@ -142,26 +164,9 @@ class SeededStore(Store):
                 )
                 rec.accepted_by = "merge"
                 self._pay(rec, now)
-            case IssueState.ACCEPTED:
+            case IssueState.IN_REVIEW:
                 # Accepted, and the payout is held: the step is checking it again.
                 self._pay(rec, now)
-            case IssueState.REWORK:
-                self._submit(
-                    rec,
-                    {
-                        "pr_number": (
-                            rec.submission.pr_number
-                            if rec.submission
-                            else self._demo_pull_request_number(rec)
-                        ),
-                        "head_sha": f"{random.getrandbits(160):040x}",
-                        "checks_passed": True,
-                        "files_changed": 4,
-                        "additions": 88,
-                        "deletions": 21,
-                    },
-                )
-                self._fabricate_files(rec)
             case _:
                 # DRAFT, PRICED and REJECTED are legal states with no demo leg out of
                 # them. Refuse with the state the lifecycle declares next rather than
@@ -204,18 +209,15 @@ class SeededStore(Store):
     def demo_pull_request(self, issue_id: str) -> PullRequest:
         """Open, on the simulated GitHub, the pull request the claimant would open on
         the real one: a fix, its test, docs and a changelog line, checks passing.
-        After rework it is a new commit on the same pull request. Submitting it is
-        still the claimant's explicit action."""
+        After a failed review it is a new commit on the same pull request. Submitting
+        it is still the claimant's explicit action."""
         self.ensure_ready()
         if not hasattr(self.github, "put_pull_request"):
             raise RuntimeError("the fake GitHub opens pull requests for you")
         rec = self.repo.get_issue(issue_id)
         if rec is None:
             raise KeyError(issue_id)
-        if rec.contributor_id is None or rec.state not in {
-            IssueState.CLAIMED,
-            IssueState.REWORK,
-        }:
+        if rec.contributor_id is None or rec.state is not IssueState.CLAIMED:
             raise lifecycle.IllegalTransition(rec.state, IssueState.IN_REVIEW)
         files = demo_files(rec.repo)
         pr = PullRequest(
@@ -354,7 +356,7 @@ class SeededStore(Store):
             outcome=f"{self._handle(contributor_id)} took an exclusive 72h claim",
         )
 
-        if target is IssueState.CLAIMED:
+        if target is IssueState.CLAIMED and "pr" not in spec:
             return rec
 
         self._submit(rec, spec["pr"])
@@ -370,7 +372,7 @@ class SeededStore(Store):
             when=rec.created_at + timedelta(hours=44),
         )
 
-        if target is IssueState.REWORK:
+        if target is IssueState.CLAIMED:
             self._log(
                 rec,
                 actor="agent",
@@ -389,9 +391,6 @@ class SeededStore(Store):
             outcome="verdict passed, awaiting the publisher's merge",
             when=rec.created_at + timedelta(hours=45),
         )
-
-        if target is IssueState.ACCEPTED:
-            return rec
 
         rec.accepted_by = "merge"
         self._release(rec, when=rec.created_at + timedelta(hours=45, minutes=2))

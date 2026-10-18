@@ -16,9 +16,10 @@ bad issue must not stop every other refund.
 
 Each pass also has the review agent judge every submitted commit that has no
 verdict yet, so a pull request is reviewed without anyone asking, once the project's
-checks have reported on it or have had `CHECKS_WAIT` to. Before that it puts back in
-rework any issue left in review on a commit already judged, which no review would
-ever take (#119). It re-screens live counterparties whose last check is a day old,
+checks have reported on it or have had `CHECKS_WAIT` to. Before that it puts back
+with its claimant any issue left in review on a commit already judged, which no
+review would ever take (#119). It re-screens live counterparties whose last check is a
+day old,
 because screening once at onboarding is the mistake 08 is written against; deletes
 screening records past their published retention period; reconciles the money
 ledger against the chain, raising an alert for any divergence; and records the
@@ -96,8 +97,9 @@ class SweepReport:
     retried."""
     reviewed: dict[str, str] = field(default_factory=dict)
     """Issue id to the verdict the review agent issued on it this pass."""
-    returned_to_rework: list[str] = field(default_factory=list)
-    """Issues found in review on a commit already judged, put back in rework (#119)."""
+    returned_to_claimed: list[str] = field(default_factory=list)
+    """Issues found in review on a commit already judged, put back with their
+    claimant (#119)."""
     screened: int = 0
     """Counterparties screened again on schedule."""
     purged: int = 0
@@ -136,7 +138,7 @@ def _sweep(store: Store, now: datetime) -> SweepReport:
                 continue
             if actions:
                 applied[rec.id] = [a.value for a in actions]
-        returned = store.return_judged_to_rework(now)
+        returned = store.return_judged_to_claimed(now)
         reviewed: dict[str, str] = {}
         # Least-failed first, so a submission that keeps failing cannot hold a slot
         # while the ones behind it starve; anything past the cap is left alone.
@@ -186,7 +188,7 @@ def _sweep(store: Store, now: datetime) -> SweepReport:
             skipped=skipped,
             failed=failed,
             reviewed=reviewed,
-            returned_to_rework=returned,
+            returned_to_claimed=returned,
             screened=len(screened),
             purged=purged,
             divergences=len(divergences),
@@ -212,9 +214,10 @@ async def run_forever(store: Store, interval_seconds: float) -> None:
                         ", ".join(actions),
                         extra={"issue_id": issue_id, "actions": actions},
                     )
-                for issue_id in report.returned_to_rework:
+                for issue_id in report.returned_to_claimed:
                     log.warning(
-                        "sweeper: %s was in review on a commit already judged; back in rework",
+                        "sweeper: %s was in review on a commit already judged; back with "
+                        "its claimant",
                         issue_id,
                         extra={"issue_id": issue_id},
                     )

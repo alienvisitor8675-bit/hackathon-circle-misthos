@@ -3,18 +3,14 @@ import { useQuery } from '@tanstack/react-query'
 import { Link, useSearchParams } from 'react-router-dom'
 import { api, money, relativeTime, type IssueSummaryOut } from '../lib/client'
 import { useMe } from '../lib/session'
+import { STATE_LABELS } from '../lib/state'
 import { Panel, StateBadge } from '../components/ui'
 
 const FILTERS = [
   { key: '', label: 'All' },
-  { key: 'AWAITING_APPROVAL', label: 'Needs price approval' },
-  { key: 'FUNDED', label: 'Funded, unclaimed' },
-  { key: 'CLAIMED', label: 'Claimed' },
-  { key: 'IN_REVIEW', label: 'In review' },
-  { key: 'REWORK', label: 'Rework' },
-  { key: 'ACCEPTED', label: 'Awaiting merge' },
-  { key: 'PAID', label: 'Settled' },
-  { key: 'REFUNDED', label: 'Refunded' },
+  ...['AWAITING_APPROVAL', 'FUNDED', 'CLAIMED', 'IN_REVIEW', 'PAID', 'REFUNDED'].map(
+    (key) => ({ key, label: STATE_LABELS[key] }),
+  ),
 ]
 
 export default function Issues() {

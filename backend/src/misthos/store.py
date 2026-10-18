@@ -502,6 +502,22 @@ class Store:
         )
         rec.contributor_id = contributor_id
 
+    def _renew_claim(self, rec: IssueRecord, at: datetime) -> None:
+        """Keep the exclusive claim alive while its holder is fixing a failed review.
+
+        The claim window runs from the last time the contributor was given the issue.
+        A review that spends the window and then asks for changes would otherwise put
+        the issue back in the pool the moment it went back to the claimant, which is
+        not the exclusive claim the failed review promises.
+        """
+        if rec.contributor_id is None:
+            return
+        rec.claim = Claim(
+            contributor_id=rec.contributor_id,
+            issued_at=at,
+            expires_at=at + lifecycle.CLAIM_WINDOW,
+        )
+
     def _submit(self, rec: IssueRecord, pr: dict) -> None:
         if rec.review is not None and rec.review.head_sha == pr["head_sha"]:
             # A commit gets one verdict, and the review only takes a commit without
@@ -537,14 +553,16 @@ class Store:
         cost: Usdc | None = None,
     ) -> None:
         """Record the platform's verdict. It is the decision, not a draft for one."""
-        self._move(
-            rec,
-            {
-                "accept": IssueState.ACCEPTED,
-                "rework": IssueState.REWORK,
-                "reject": IssueState.REJECTED,
-            }[verdict],
-        )
+        if verdict == "rework":
+            # A failed review sends the work back to the contributor, who still holds
+            # the claim. The verdict stays on the record so the page can show what
+            # needs changing.
+            self._move(rec, IssueState.CLAIMED)
+            self._renew_claim(rec, when or _now())
+        elif verdict == "reject":
+            self._move(rec, IssueState.REJECTED)
+        # A passing verdict leaves the issue in IN_REVIEW: the work is not accepted
+        # until the publisher merges, so the state does not change yet.
         rec.review = Review(
             verdict=verdict,  # type: ignore[arg-type]
             findings=findings,
@@ -580,8 +598,8 @@ class Store:
         at = when or _now()
         amount = self._committed(rec)
         # The state moves only once the chain has taken the release. If it reverts or
-        # cannot be reached, the issue stays ACCEPTED and `_pay` holds the payout rather
-        # than losing the acceptance with it (#125).
+        # cannot be reached, the issue stays IN_REVIEW with the acceptance recorded
+        # and `_pay` holds the payout rather than losing the acceptance with it (#125).
         tx = self.chain.release(rec.id, contributor.wallet.address, amount, at)
         self._move(rec, IssueState.PAID)
         self._book(rec, MoneyEventKind.RELEASED, amount, contributor.id, tx, at)
@@ -1165,10 +1183,23 @@ class Store:
     # ----------------------------------------------------------------- timers
 
     @staticmethod
+    def _passing(rec: IssueRecord) -> bool:
+        """Whether the commit in review carries a passing verdict from the review agent."""
+        return (
+            rec.state is IssueState.IN_REVIEW
+            and rec.submission is not None
+            and rec.review is not None
+            and rec.review.verdict == "accept"
+            and rec.review.head_sha == rec.submission.head_sha
+        )
+
+    @staticmethod
     def _clocks(rec: IssueRecord) -> timers.Clocks:
         # The grace period only runs until something accepts the work; after that the
         # payout is owed, and what is timed is retrying it when compliance held it.
-        passed = rec.review is not None and rec.review.verdict == "accept"
+        # A verdict is about one commit: a later push needs its own review, and an
+        # older passing verdict must not release the new commit on the old grace.
+        passed = Store._passing(rec)
         awaiting_acceptance = passed and rec.accepted_by is None
         return timers.Clocks(
             state=rec.state,
@@ -1502,22 +1533,24 @@ class Store:
 
     @staticmethod
     def _judged_already(rec: IssueRecord) -> bool:
-        """In review on a commit the review has already judged.
+        """In review on a commit whose review failed but the state did not follow.
 
         Only a resubmission of the same commit could do this, before #119 refused it.
         No review takes the commit again and no timer runs in review, so nothing would
-        ever move the issue or the money it holds.
+        ever move the issue or the money it holds. A passing verdict is excluded: it
+        is the expected state of an issue waiting for its publisher to merge.
         """
         return (
             rec.state is IssueState.IN_REVIEW
             and rec.submission is not None
             and rec.review is not None
+            and rec.review.verdict != "accept"
             and rec.review.head_sha == rec.submission.head_sha
         )
 
-    def return_judged_to_rework(self, now: datetime | None = None) -> list[str]:
-        """Put each issue left in review on an already judged commit back in REWORK,
-        the state it was resubmitted from, so a new commit can be pushed and reviewed.
+    def return_judged_to_claimed(self, now: datetime | None = None) -> list[str]:
+        """Put each issue left in review on an already judged commit back in CLAIMED,
+        where the contributor can push a new commit and have it reviewed.
 
         The sweeper runs it on every pass. An issue someone is acting on is left for the
         next pass. Returns the issues it moved.
@@ -1532,16 +1565,17 @@ class Store:
                     if rec is None or not self._judged_already(rec):
                         continue
                     assert rec.submission is not None
-                    self._move(rec, IssueState.REWORK)
+                    self._move(rec, IssueState.CLAIMED)
+                    self._renew_claim(rec, now or _now())
                     self._log(
                         rec,
                         actor="system",
-                        action="returned_to_rework",
+                        action="returned_to_claimed",
                         rule="commit_already_judged",
                         outcome=f"{rec.submission.head_sha[:7]} on PR "
                         f"#{rec.submission.pr_number} was submitted again after its verdict, "
-                        "so no review could take it; the issue is back in rework until a "
-                        "new commit is pushed",
+                        "so no review could take it; the issue is back with its claimant "
+                        "until a new commit is pushed",
                         when=now,
                     )
                     self.repo.save_issues(rec)
@@ -1625,7 +1659,7 @@ class Store:
             return fresh
 
     def dispute(self, issue_id: str, reason: str, now: datetime | None = None) -> IssueRecord:
-        """The contributor challenges a rework or reject verdict.
+        """The contributor challenges a changes-requested or rejected verdict.
 
         The same commit is reviewed again against the published criteria, by the
         second reviewer, and the outcome is recorded either way. Overturned, the
@@ -1635,8 +1669,12 @@ class Store:
         rec = self.repo.get_issue(issue_id)
         if rec is None:
             raise KeyError(issue_id)
-        if rec.state not in {IssueState.REWORK, IssueState.REJECTED} or rec.review is None:
-            raise lifecycle.IllegalTransition(rec.state, IssueState.ACCEPTED)
+        if (
+            rec.state not in {IssueState.CLAIMED, IssueState.REJECTED}
+            or rec.review is None
+            or rec.review.verdict == "accept"
+        ):
+            raise lifecycle.IllegalTransition(rec.state, IssueState.IN_REVIEW)
         disputed_at = rec.review.decided_at
         if _disputed_since(rec, disputed_at):
             raise DisputeRefused(f"the {rec.review.verdict} verdict on {rec.id} was already disputed")
@@ -1670,7 +1708,7 @@ class Store:
                 rework_rounds=0,
             )
             if decided.verdict is Verdict.ACCEPT:
-                if fresh.state is IssueState.REWORK:
+                if fresh.state is not IssueState.IN_REVIEW:
                     self._move(fresh, IssueState.IN_REVIEW)
                 self._review(
                     fresh,
@@ -1703,8 +1741,8 @@ class Store:
         """The publisher declines work the review passed, and says why.
 
         Distinct from going silent, which releases the payment after the grace
-        period. The work goes back for rework with the publisher's reason as its
-        finding, and counts as a rework round. A publisher declines once per issue,
+        period. The work goes back to the contributor with the publisher's reason on
+        the record, and counts as a rework round. A publisher declines once per issue,
         and before the grace period ends: after that the merge or the grace period
         settles it, so declining cannot be a way to keep finished work without paying
         for it.
@@ -1713,15 +1751,15 @@ class Store:
             rec = self.repo.get_issue(issue_id)
             if rec is None:
                 raise KeyError(issue_id)
-            # Before the state check, so a retried decline, which finds the issue in
-            # REWORK, is told why rather than that REWORK cannot move to REWORK.
+            # Before the state check, so a retried decline, which finds the issue back
+            # with its claimant, is told why rather than that CLAIMED cannot move there.
             if any(d.action == "publisher_declined" for d in rec.decisions):
                 raise DeclineRefused(
                     f"the publisher already declined {rec.id} once; merging it or the grace "
                     "period settles it now"
                 )
-            if rec.state is not IssueState.ACCEPTED or rec.accepted_by is not None:
-                raise lifecycle.IllegalTransition(rec.state, IssueState.REWORK)
+            if not self._passing(rec) or rec.accepted_by is not None:
+                raise lifecycle.IllegalTransition(rec.state, IssueState.CLAIMED)
             if timers.due(self._clocks(rec), now or _now()) is TimedAction.RELEASE_AFTER_GRACE:
                 # The silence already accepted the work and the release is owed; the
                 # sweeper's next pass pays it. Declining now would drop that payout.
@@ -1729,7 +1767,8 @@ class Store:
                     f"the grace period on {rec.id} has ended, so the publisher's silence "
                     "accepted the work and the payment is released on the next sweep"
                 )
-            self._move(rec, IssueState.REWORK)
+            self._move(rec, IssueState.CLAIMED)
+            self._renew_claim(rec, now or _now())
             reason = reason.strip()[:500]
             self._log(
                 rec,
@@ -1798,8 +1837,10 @@ class Store:
             rec = self.repo.get_issue(issue_id)
             if rec is None:
                 raise KeyError(issue_id)
-            if rec.state is not IssueState.ACCEPTED or rec.payout_hold != (
-                PayoutGate.AWAIT_APPROVER.value
+            if (
+                rec.state is not IssueState.IN_REVIEW
+                or rec.accepted_by is None
+                or rec.payout_hold != PayoutGate.AWAIT_APPROVER.value
             ):
                 raise lifecycle.IllegalTransition(rec.state, IssueState.PAID)
             publisher = self.repo.get_publisher(rec.publisher_id)
@@ -2364,7 +2405,8 @@ class Store:
     def submit_pull_request(
         self, issue_id: str, pr: PullRequest, now: datetime | None = None
     ) -> IssueRecord:
-        """A pull request that closes the issue was opened, or pushed to after rework.
+        """A pull request that closes the issue was opened, or pushed to after a failed
+        review.
 
         Only the contributor holding the claim submits: anyone can open a pull
         request that mentions an issue, and only one of them is owed money. A pull
@@ -2375,20 +2417,17 @@ class Store:
             rec = self.repo.get_issue(issue_id)
             if rec is None:
                 raise KeyError(issue_id)
-            if rec.contributor_id is None or rec.state not in {
-                IssueState.CLAIMED,
-                IssueState.REWORK,
-            }:
+            if rec.contributor_id is None or rec.state is not IssueState.CLAIMED:
                 raise lifecycle.IllegalTransition(rec.state, IssueState.IN_REVIEW)
             claimant = self._handle(rec.contributor_id)
             if pr.author.lower() != claimant.lower():
                 raise NotTheSubmission(
                     f"{pr.author} opened #{pr.number}, but {claimant} holds the claim"
                 )
-            if rec.state is IssueState.REWORK and rec.submission is not None:
+            if rec.state is IssueState.CLAIMED and rec.submission is not None:
                 if rec.submission.pr_number != pr.number:
                     raise NotTheSubmission(
-                        f"rework continues on #{rec.submission.pr_number}, not #{pr.number}"
+                        f"the work continues on #{rec.submission.pr_number}, not #{pr.number}"
                     )
             # Two issues take two different issue locks, so the pull request has one of
             # its own: without it, the same pull request submitted to both at once
@@ -2400,7 +2439,7 @@ class Store:
                         f"#{pr.number} was already submitted for {elsewhere.id}; a pull "
                         "request counts toward one issue only"
                     )
-                resubmitted = rec.state is IssueState.REWORK
+                resubmitted = rec.submission is not None
                 history = self.github.merged_pull_requests(rec.repo, pr.author)
                 self._submit(
                     rec,
@@ -2509,19 +2548,17 @@ class Store:
             return rec
 
     def _accept_by_merge(self, rec: IssueRecord, pr_number: int, now: datetime) -> None:
-        if rec.state is IssueState.REWORK:
+        if rec.state is IssueState.CLAIMED:
             # The publisher merged what was there, so that is the submission.
             self._move(rec, IssueState.IN_REVIEW)
-        if rec.state is IssueState.IN_REVIEW:
-            self._move(rec, IssueState.ACCEPTED)
-            outcome = (
-                f"the publisher merged PR #{pr_number} before the review finished, "
-                "which is acceptance"
-            )
-        elif rec.state is IssueState.ACCEPTED:
-            outcome = f"the publisher merged PR #{pr_number}, which is acceptance"
-        else:
+        if rec.state is not IssueState.IN_REVIEW:
             raise lifecycle.IllegalTransition(rec.state, IssueState.PAID)
+        outcome = (
+            f"the publisher merged PR #{pr_number}, which is acceptance"
+            if self._passing(rec)
+            else f"the publisher merged PR #{pr_number} before the review passed, "
+            "which is acceptance"
+        )
         if rec.accepted_by is None:
             self._log(
                 rec,
@@ -2795,8 +2832,8 @@ def _criteria_comment(rec: IssueRecord, committed: Usdc) -> str:
 
 def _review_comment(verdict: str, findings: list[str]) -> str:
     heading = {
-        "accept": "Accepted: the acceptance criteria are met.",
-        "rework": "Rework needed before this can be accepted.",
+        "accept": "Passed review: the acceptance criteria are met. Ready to merge.",
+        "rework": "Changes requested: the work does not meet every criterion yet.",
         "reject": "Rejected: this does not meet the acceptance criteria.",
     }[verdict]
     listed = "\n".join(f"- {f}" for f in findings)

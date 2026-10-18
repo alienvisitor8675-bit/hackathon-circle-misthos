@@ -137,6 +137,16 @@ Notable changes to Misthos, newest first. The format follows
 
 ### Changed
 
+- **Fewer issue statuses, named the same everywhere** (#217). `Rework` and
+  `Awaiting merge` are gone as statuses. A failed review puts the issue back in
+  `Claimed`, where the contributor keeps the exclusive claim and the refunding timer
+  cannot reach it; a passing verdict leaves it in `In review` until the publisher
+  merges. The review record still carries the verdict, and the issue page says
+  *Changes requested* or *Passed review, ready to merge*, so nothing the old statuses
+  encoded is lost. Filters and badges read their names from one map, and migration
+  `0023` moves surviving rows: `REWORK` to `CLAIMED`, `ACCEPTED` to `IN_REVIEW`.
+  The grace-period release, compliance hold and payout retry now key off a passing
+  verdict on the current commit rather than the removed state.
 - **Publish from connected repositories and issues** (#199). The publish form no
   longer takes an `owner/name` and an issue number as free text. It offers the
   publisher's connected repositories, then the open issues in the chosen one; pulling

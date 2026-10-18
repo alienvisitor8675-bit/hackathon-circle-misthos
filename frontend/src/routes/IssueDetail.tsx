@@ -14,6 +14,7 @@ import { Bar, ChecksChip, Panel, StateBadge, Stepper } from '../components/ui'
 import IssueActions, { roleOn } from '../components/IssueActions'
 import { BridgeToArc } from '../components/BridgeToArc'
 import { contributorShare, platformFee } from '../lib/fee'
+import { reviewResult } from '../lib/state'
 import { useMe } from '../lib/session'
 
 export default function IssueDetail() {
@@ -45,6 +46,15 @@ export default function IssueDetail() {
         Could not load {issueId}. <Link to="/issues">Back to issues</Link>
       </div>
     )
+
+  // The publisher's decline is a second decision on top of the review, not a new
+  // verdict, so the panel reads it from the log to say why the work went back.
+  const declined = timeline?.filter((t) => t.action === 'publisher_declined').at(-1)
+  const declinedAfterReview = Boolean(
+    declined && issue.review && new Date(declined.created_at) >= new Date(issue.review.decided_at),
+  )
+  const review = reviewResult(issue, declinedAfterReview)
+  const declineReason = declined?.outcome.split(': ').slice(1).join(': ')
 
   const p = issue.proposal
   const signals = p ? Object.entries(p.signals) : []
@@ -122,20 +132,29 @@ export default function IssueDetail() {
           {issue.review && (
             <Panel title="Review">
               <dl className="kv" style={{ marginBottom: 14 }}>
-                <dt>Verdict</dt>
+                <dt>Result</dt>
                 <dd>
-                  <span className={`chip ${issue.review.verdict === 'accept' ? 'ok' : 'warn'}`}>
-                    {issue.review.verdict}
-                  </span>
+                  {review ? (
+                    <span className={`chip ${review.tone}`}>{review.label}</span>
+                  ) : (
+                    <span className="muted">No verdict yet</span>
+                  )}
                 </dd>
                 <dt>Decided</dt>
                 <dd className="muted">{shortTime(issue.review.decided_at)}</dd>
               </dl>
-              <ul className="findings">
-                {issue.review.findings.map((f) => (
-                  <li key={f}>{f}</li>
-                ))}
-              </ul>
+              {issue.review.findings.length > 0 && (
+                <ul className="findings">
+                  {issue.review.findings.map((f) => (
+                    <li key={f}>{f}</li>
+                  ))}
+                </ul>
+              )}
+              {declinedAfterReview && declineReason && (
+                <p className="stat-hint" style={{ marginTop: 12 }}>
+                  The publisher declined the passing verdict: {declineReason}
+                </p>
+              )}
             </Panel>
           )}
 

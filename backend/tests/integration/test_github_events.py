@@ -100,7 +100,12 @@ def pull_request(
 
 CLAIMED = ("ISS-1003", "globex/parse-locale", 87, "amara.dev")  # seeded CLAIMED
 IN_REVIEW = ("ISS-1002", "acme/ledger-core", 903)  # seeded IN_REVIEW, PR #903
-REWORK = ("ISS-1007", "northwind/httpx-retry", 640, "tom_e")  # seeded REWORK, PR #640
+CHANGES_REQUESTED = (
+    "ISS-1007",
+    "northwind/httpx-retry",
+    640,
+    "tom_e",
+)  # seeded with changes requested, PR #640
 
 
 class TestLinking:
@@ -161,7 +166,7 @@ class TestSubmission:
         assert get(issue_id).state is IssueState.IN_REVIEW
 
     def test_pushing_rework_puts_it_back_in_review(self, client: TestClient) -> None:
-        issue_id, repo, pr, author = REWORK
+        issue_id, repo, pr, author = CHANGES_REQUESTED
         push = pull_request(repo, pr, author, action="synchronize", body="Fixes #231", sha="b" * 40)
         out = deliver(client, "pull_request", push)
 
@@ -288,8 +293,8 @@ class TestMergeIsAcceptance:
 
     def test_a_merge_after_a_passing_verdict_pays(self, client: TestClient) -> None:
         issue_id, repo, pr = IN_REVIEW
-        store.advance(issue_id)  # the verdict passes: ACCEPTED, waiting for the merge
-        assert get(issue_id).state is IssueState.ACCEPTED
+        store.advance(issue_id)  # the verdict passes; the issue still waits for a merge
+        assert get(issue_id).state is IssueState.IN_REVIEW
 
         deliver(
             client, "pull_request", pull_request(repo, pr, "jonas_k", action="closed", merged=True)
@@ -303,7 +308,7 @@ class TestMergeIsAcceptance:
         500, the issue showed no merge, and the publisher could then decline work they had
         merged (#125). The merge stands and the payout is held."""
         issue_id, repo, pr = IN_REVIEW
-        store.advance(issue_id)  # the verdict passes: ACCEPTED, waiting for the merge
+        store.advance(issue_id)  # the verdict passes; the issue still waits for a merge
         release = store.chain.release
 
         def refused(*_: object) -> str:
@@ -318,7 +323,7 @@ class TestMergeIsAcceptance:
         # delivery is recorded against the issue.
         assert out["handled"] and out["issue_ids"] == [issue_id]
         rec = get(issue_id)
-        assert rec.state is IssueState.ACCEPTED
+        assert rec.state is IssueState.IN_REVIEW
         assert rec.accepted_by == "merge"
         assert "merged" in [d.action for d in rec.decisions]
         assert rec.payout_hold == PayoutGate.RELEASE_FAILED.value
@@ -327,7 +332,7 @@ class TestMergeIsAcceptance:
         # Nor can the publisher take the acceptance back: the merge is on the record.
         declined = client.post(f"{API}/issues/{issue_id}/decline", json={"reason": "No."})
         assert declined.status_code == 409
-        assert get(issue_id).state is IssueState.ACCEPTED
+        assert get(issue_id).state is IssueState.IN_REVIEW
 
         # The next pass tries again, and once the chain takes it the contributor is paid.
         monkeypatch.setattr(store.chain, "release", release)
@@ -353,20 +358,22 @@ class TestMergeIsAcceptance:
 
         rec = get(issue_id)
         assert (rec.state, rec.accepted_by, rec.payout_hold) == (
-            IssueState.ACCEPTED,
+            IssueState.IN_REVIEW,
             "merge",
             PayoutGate.RELEASE_FAILED.value,
         )
         assert all("key-123" not in d.outcome for d in rec.decisions)
         assert "chain could not be reached" in rec.decisions[-1].outcome
 
-    def test_merging_during_rework_accepts_what_was_merged(self, client: TestClient) -> None:
-        issue_id, repo, pr, author = REWORK
+    def test_merging_after_a_failed_review_accepts_what_was_merged(
+        self, client: TestClient
+    ) -> None:
+        issue_id, repo, pr, author = CHANGES_REQUESTED
         deliver(
             client, "pull_request", pull_request(repo, pr, author, action="closed", merged=True)
         )
         rec = get(issue_id)
-        assert rec.state in {IssueState.PAID, IssueState.ACCEPTED}  # ACCEPTED if held
+        assert rec.state in {IssueState.PAID, IssueState.IN_REVIEW}  # held payout
         assert rec.accepted_by == "merge"
 
     def test_closing_without_merging_moves_no_money(self, client: TestClient) -> None:

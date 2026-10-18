@@ -40,7 +40,7 @@ from misthos.services.paid import PaidCaller, free_tier
 from misthos.services.paid_views import Unanswerable
 from misthos.store import ESCROW, Store
 
-OPEN = (IssueState.FUNDED, IssueState.CLAIMED, IssueState.IN_REVIEW, IssueState.REWORK)
+OPEN = (IssueState.FUNDED, IssueState.CLAIMED, IssueState.IN_REVIEW)
 """Funded and not finished: the money is held and the work is not yet accepted."""
 OPPORTUNITIES_PAGE_DEFAULT = 25
 OPPORTUNITIES_PAGE_MAX = 100

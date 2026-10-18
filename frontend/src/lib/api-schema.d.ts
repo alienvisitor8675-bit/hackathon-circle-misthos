@@ -333,8 +333,8 @@ export interface paths {
         /**
          * Decline
          * @description The publisher declines work the review passed, with a reason. Once per issue:
-         *     the work goes back for rework, and after that the merge or the grace period
-         *     settles it.
+         *     the work goes back to its contributor, and after that the merge or the grace
+         *     period settles it.
          */
         post: operations["decline_api_v1_issues__issue_id__decline_post"];
         delete?: never;
@@ -511,8 +511,9 @@ export interface paths {
         put?: never;
         /**
          * Dispute
-         * @description The contributor challenges a rework or reject verdict: the same commit is
-         *     reviewed again against the published criteria, and the outcome is recorded.
+         * @description The contributor challenges a changes-requested or reject verdict: the same
+         *     commit is reviewed again against the published criteria, and the outcome is
+         *     recorded.
          */
         post: operations["dispute_api_v1_issues__issue_id__dispute_post"];
         delete?: never;

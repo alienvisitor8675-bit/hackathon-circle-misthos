@@ -158,35 +158,42 @@ export default function IssueActions({
       )
       break
     case 'CLAIMED':
-    case 'REWORK':
       body = who.claimant ? (
         <Submit issue={issue} busy={busy} run={run} />
       ) : (
         <Wait>
-          {issue.state === 'REWORK'
+          {issue.review?.verdict === 'rework'
             ? 'The review asked for changes. The claimant pushes to the same pull request.'
             : 'Claimed. Waiting for the claimant to open a pull request that fixes it.'}
         </Wait>
       )
       break
-    case 'IN_REVIEW':
-      body =
-        who.publisher || who.claimant ? (
-          <>
-            <p className="dim action-hint">
-              The review agent judges each criterion against the diff on its next pass. You
-              can ask for it now.
-            </p>
-            <button className="btn primary" disabled={busy} onClick={() => run({ kind: 'review' })}>
-              {busy ? 'Reviewing…' : 'Review it now'}
-            </button>
-          </>
-        ) : (
-          <Wait>The review agent is judging the pull request against the criteria.</Wait>
-        )
-      break
-    case 'ACCEPTED':
-      if (issue.awaiting_approver) {
+    case 'IN_REVIEW': {
+      // A passing verdict is still in review until the publisher merges, so the
+      // state alone cannot say whether there is anything left to judge.
+      const passed =
+        issue.review?.verdict === 'accept' &&
+        issue.review.head_sha === issue.submission?.head_sha
+      if (!passed) {
+        body =
+          who.publisher || who.claimant ? (
+            <>
+              <p className="dim action-hint">
+                The review agent judges each criterion against the diff on its next pass. You
+                can ask for it now.
+              </p>
+              <button
+                className="btn primary"
+                disabled={busy}
+                onClick={() => run({ kind: 'review' })}
+              >
+                {busy ? 'Reviewing…' : 'Review it now'}
+              </button>
+            </>
+          ) : (
+            <Wait>The review agent is judging the pull request against the criteria.</Wait>
+          )
+      } else if (issue.awaiting_approver) {
         // Anyone the organisation named approves, signed in as themselves; the
         // contributor being paid never does.
         body =
@@ -215,6 +222,7 @@ export default function IssueActions({
         )
       }
       break
+    }
     case 'REJECTED':
       body = who.claimant ? (
         <Reason
@@ -396,15 +404,19 @@ function ChangePrice({ issue, busy, run }: Step) {
 
 function Submit({ issue, busy, run }: Step) {
   const [prNumber, setPrNumber] = useState(issue.submission?.pr_number?.toString() ?? '')
-  // The commit the review already judged. A commit gets one verdict, so after a rework
-  // verdict or a decline the work goes back as a new commit. The same one is refused:
+  // The commit the review already judged. A commit gets one verdict, so after a failed
+  // review or a decline the work goes back as a new commit. The same one is refused:
   // in review it would wait for a review that never comes (#119).
-  const judged = issue.state === 'REWORK' ? (issue.review?.head_sha ?? null) : null
+  const judged =
+    issue.review && issue.submission && issue.review.head_sha === issue.submission.head_sha
+      ? issue.review.head_sha
+      : null
+  const continuing = Boolean(issue.submission)
 
   return (
     <div className="form">
       <p className="dim action-hint">
-        {issue.state === 'REWORK'
+        {continuing
           ? `Push the requested changes to #${issue.submission?.pr_number} as a new commit, then submit it again.${judged ? ` The review already judged ${judged.slice(0, 7)}, and a commit is judged once.` : ''}`
           : `Open a pull request on ${issue.repo} that says "Fixes #${issue.number}", then submit it here. Only a pull request you opened counts.`}
       </p>
@@ -497,7 +509,7 @@ function Accepted({ issue, busy, run }: Step) {
       </div>
       <Reason
         label="Decline, with a reason"
-        hint="Once per issue: the work goes back for rework, and after that the merge or the grace period settles it."
+        hint="Once per issue: the work goes back to the contributor, and after that the merge or the grace period settles it."
         busy={busy}
         onSubmit={(reason) => run({ kind: 'decline', reason })}
       />

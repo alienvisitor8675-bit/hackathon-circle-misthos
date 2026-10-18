@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { api, money, relativeTime, type IssueSummaryOut } from '../lib/client'
+import { STATE_LABELS, stateLabel } from '../lib/state'
 import { GateLink } from './SignInGate'
 
 /**
@@ -12,27 +13,23 @@ import { GateLink } from './SignInGate'
  * then it opens the gate (#181).
  */
 
-/** The words the landing uses for each state, and the colour it gives it. */
-const STATES: Record<string, { label: string; tone?: string }> = {
-  DRAFT: { label: 'Draft' },
-  PRICED: { label: 'Priced' },
-  AWAITING_APPROVAL: { label: 'Needs price approval', tone: 'approval' },
-  FUNDED: { label: 'Funded, unclaimed', tone: 'funded' },
-  CLAIMED: { label: 'Claimed', tone: 'claimed' },
-  IN_REVIEW: { label: 'In review', tone: 'review' },
-  REWORK: { label: 'Rework', tone: 'rework' },
-  ACCEPTED: { label: 'Awaiting merge', tone: 'merge' },
-  PAID: { label: 'Settled', tone: 'settled' },
-  REJECTED: { label: 'Rejected', tone: 'refunded' },
-  REFUNDED: { label: 'Refunded', tone: 'refunded' },
+/** The colour the landing gives each state; the names come from `stateLabel`. */
+const TONES: Record<string, string> = {
+  AWAITING_APPROVAL: 'approval',
+  FUNDED: 'funded',
+  CLAIMED: 'claimed',
+  IN_REVIEW: 'review',
+  PAID: 'settled',
+  REJECTED: 'refunded',
+  REFUNDED: 'refunded',
 }
 
 const COMPLIANCE = 'COMPLIANCE'
 
 const FILTERS: { key: string; label: string }[] = [
   { key: '', label: 'All' },
-  ...['AWAITING_APPROVAL', 'FUNDED', 'CLAIMED', 'IN_REVIEW', 'REWORK', 'ACCEPTED', 'PAID', 'REFUNDED'].map(
-    (key) => ({ key, label: STATES[key].label }),
+  ...['AWAITING_APPROVAL', 'FUNDED', 'CLAIMED', 'IN_REVIEW', 'PAID', 'REFUNDED'].map(
+    (key) => ({ key, label: STATE_LABELS[key] }),
   ),
   { key: COMPLIANCE, label: 'Compliance-driven only' },
 ]
@@ -102,7 +99,7 @@ export default function LandingIssues() {
             </thead>
             <tbody aria-live="polite">
               {shown.map((issue) => {
-                const state = STATES[issue.state] ?? { label: issue.state.replace(/_/g, ' ') }
+                const tone = TONES[issue.state] ?? ''
                 return (
                   <tr key={issue.id}>
                     <td className="issue-title-cell">
@@ -115,8 +112,8 @@ export default function LandingIssues() {
                     </td>
                     <td>{issue.publisher_name}</td>
                     <td>
-                      <span className={`issue-state${state.tone ? ` issue-state-${state.tone}` : ''}`}>
-                        {state.label}
+                      <span className={`issue-state${tone ? ` issue-state-${tone}` : ''}`}>
+                        {stateLabel(issue.state)}
                       </span>
                     </td>
                     <td className={`issue-confidence${issue.confidence ? ` confidence-${issue.confidence}` : ''}`}>

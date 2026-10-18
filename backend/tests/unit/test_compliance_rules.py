@@ -53,7 +53,7 @@ class TestRescreening:
 
 class TestHeldPayouts:
     def held(self) -> Clocks:
-        return Clocks(IssueState.ACCEPTED, deadline=T0 + timedelta(days=14), payout_held_since=T0)
+        return Clocks(IssueState.IN_REVIEW, deadline=T0 + timedelta(days=14), payout_held_since=T0)
 
     def test_a_held_payout_is_not_rechecked_every_sweep(self) -> None:
         assert due(self.held(), T0 + PAYOUT_RETRY_INTERVAL) is None

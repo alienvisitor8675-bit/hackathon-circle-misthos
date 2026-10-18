@@ -388,7 +388,7 @@ class TestLifecycleThroughTheApi:
         store.advance("ISS-1002")  # seeded IN_REVIEW, the verdict passes
         rec = store.get("ISS-1002")
         assert rec is not None
-        assert rec.state is IssueState.ACCEPTED
+        assert rec.state is IssueState.IN_REVIEW
         assert rec.review is not None
 
         # Backdate the verdict past the grace window and advance again.
@@ -405,7 +405,7 @@ class TestLifecycleThroughTheApi:
         store.advance("ISS-1002")
         rec = store.get("ISS-1002")
         assert rec is not None and rec.escrow is not None and rec.review is not None
-        assert rec.state is IssueState.ACCEPTED
+        assert rec.state is IssueState.IN_REVIEW
 
         # A verdict six days ago, with the deadline already behind us: a full seven-day
         # grace would end a day after the contract stopped paying, so the window ends
@@ -423,11 +423,13 @@ class TestLifecycleThroughTheApi:
         assert paid.state is IssueState.PAID
         assert paid.decisions[-1].rule == "silent_publisher_grace_period"
 
-    def test_an_issue_awaiting_merge_still_counts_as_open(self, client: TestClient) -> None:
-        """ACCEPTED holds committed money until the publisher merges."""
+    def test_an_issue_ready_to_merge_still_counts_as_open(self, client: TestClient) -> None:
+        """A passing verdict holds committed money until the publisher merges."""
         before = client.get(f"{API}/metrics").json()["open_issues"]
-        store.advance("ISS-1002")  # IN_REVIEW -> ACCEPTED
-        assert client.get(f"{API}/issues/ISS-1002").json()["state"] == "ACCEPTED"
+        store.advance("ISS-1002")  # the verdict passes and the issue stays in review
+        body = client.get(f"{API}/issues/ISS-1002").json()
+        assert body["state"] == "IN_REVIEW"
+        assert body["review"]["verdict"] == "accept"
         assert client.get(f"{API}/metrics").json()["open_issues"] == before
 
     def test_advancing_a_state_with_no_demo_leg_is_conflict(

@@ -8,9 +8,9 @@ where it can be judged at any instant without a clock, a database or a worker. T
 sweeper asks this module what is due and the store carries it out; nothing here
 moves state.
 
-Work under review is deliberately never timed out. An issue in IN_REVIEW or REWORK
-past its deadline is the conflict #33 exists to settle in the contract, and refunding
-it from here would take money from a contributor whose work the platform is judging.
+Work under review is deliberately never timed out. An issue in IN_REVIEW past its
+deadline is the conflict #33 exists to settle in the contract, and refunding it from
+here would take money from a contributor whose work the platform is judging.
 
 The silent-publisher release is the one timer bounded by another: the grace is capped at
 the escrow deadline, because `release` reverts once that has passed. Uncapped, a verdict
@@ -36,7 +36,7 @@ class TimedAction(StrEnum):
 
 
 # The only states a timer can move an issue out of.
-TIMED_STATES = frozenset({IssueState.FUNDED, IssueState.CLAIMED, IssueState.ACCEPTED})
+TIMED_STATES = frozenset({IssueState.FUNDED, IssueState.CLAIMED, IssueState.IN_REVIEW})
 
 
 @dataclass(frozen=True)
@@ -60,9 +60,9 @@ def due(clocks: Clocks, now: datetime) -> TimedAction | None:
     refund it.
     """
     match clocks.state:
-        case IssueState.ACCEPTED if _release_due(clocks, now):
+        case IssueState.IN_REVIEW if _release_due(clocks, now):
             return TimedAction.RELEASE_AFTER_GRACE
-        case IssueState.ACCEPTED if _elapsed(clocks.payout_held_since, now, PAYOUT_RETRY_INTERVAL):
+        case IssueState.IN_REVIEW if _elapsed(clocks.payout_held_since, now, PAYOUT_RETRY_INTERVAL):
             return TimedAction.RETRY_PAYOUT
         case IssueState.CLAIMED if _elapsed(clocks.claim_expires_at, now) or _elapsed(
             clocks.deadline, now

@@ -317,7 +317,7 @@ diff.
 
 **`GET /paid/opportunities`**: funded issues still open, the feed a contributor's agent
 works from. Only issues whose money the escrow holds and whose work is not yet accepted
-(`FUNDED`, `CLAIMED`, `IN_REVIEW`, `REWORK`). Each names its price, what the
+(`FUNDED`, `CLAIMED`, `IN_REVIEW`). Each names its price, what the
 contributor would receive after the fee, the deadline, whether it can be claimed now
 and when a claim on it runs out, the repo, labels, acceptance criteria and its GitHub
 link; never who holds it. Filters: `repo`, `labels` (comma separated, all of them),

@@ -343,8 +343,8 @@ async def decline(
     account: Account | None = SIGNED_IN,
 ) -> Any:
     """The publisher declines work the review passed, with a reason. Once per issue:
-    the work goes back for rework, and after that the merge or the grace period
-    settles it."""
+    the work goes back to its contributor, and after that the merge or the grace
+    period settles it."""
     rec = await _require(issue_id)
     require_owner(account, rec.publisher_id, "decline this work")
     return await idempotent(
@@ -572,8 +572,9 @@ async def dispute(
     idempotency_key: str | None = IDEMPOTENCY_KEY,
     account: Account | None = SIGNED_IN,
 ) -> Any:
-    """The contributor challenges a rework or reject verdict: the same commit is
-    reviewed again against the published criteria, and the outcome is recorded."""
+    """The contributor challenges a changes-requested or reject verdict: the same
+    commit is reviewed again against the published criteria, and the outcome is
+    recorded."""
     rec = await _require(issue_id)
     require_owner(account, rec.contributor_id or "", "dispute this verdict")
     return await idempotent(

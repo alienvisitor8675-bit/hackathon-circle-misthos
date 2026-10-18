@@ -199,7 +199,7 @@ The lifecycle is the single writer of issue state. Letting the pricing engine or
 | `issue_comment`: `/misthos claim` from a linked contributor | `FUNDED` to `CLAIMED` |
 | `issues` edited or relabelled | The engine's suggestion is refreshed, while the issue is unfunded. The price the publisher set does not move |
 | `pull_request` opened by the claimant, closing the issue | `CLAIMED` to `IN_REVIEW` |
-| `pull_request` synchronize during rework | `REWORK` to `IN_REVIEW` |
+| `pull_request` synchronize after a failed review | `CLAIMED` to `IN_REVIEW` |
 | `check_run` completed | Whether the project's own checks passed on the submitted commit. Until they report it is unknown, not failing |
 | `pull_request` closed and merged | Acceptance, and the payout. A merge before the verdict is acceptance too |
 
@@ -468,7 +468,7 @@ Every verdict records its reviewer, the commit, how long it took and what it cos
 
 The review service issues the verdict and never releases money. That separation is C2, and it is also the answer to the hackathon's own framing of delegated authority: the agent can decide, but the limit sits somewhere it cannot reach.
 
-Rework rounds are bounded. An unbounded review loop costs more than the fix is worth, which is the exact problem the product exists to solve. After two rework rounds, work that still misses a criterion is rejected, and each rework verdict restates exactly which criteria are unmet. A contributor can dispute a rework or reject verdict once: the same commit is reviewed again by the second reviewer, and the outcome is recorded either way. An overturned rejection goes to `ACCEPTED`, which is the one transition the dispute adds. A publisher can decline a passing verdict once, with a reason: the work goes back to `REWORK` with that reason as its finding and counts as a rework round, and after that the merge or the grace period settles it. Declines are what the publisher overturn rate counts.
+Rework rounds are bounded. An unbounded review loop costs more than the fix is worth, which is the exact problem the product exists to solve. After two rework rounds, work that still misses a criterion is rejected, and each rework verdict restates exactly which criteria are unmet. A contributor can dispute a rework or reject verdict once: the same commit is reviewed again by the second reviewer, and the outcome is recorded either way. An overturned rejection goes back to `IN_REVIEW`, which is the one transition the dispute adds; a passing verdict stays there until the publisher merges. A publisher can decline a passing verdict once, with a reason: the work goes back to `CLAIMED`, the reason is logged, and it counts as a rework round. After that the merge or the grace period settles it. Declines are what the publisher overturn rate counts.
 
 Merge is acceptance. Payment is triggered by the merge event rather than by a separate click, so a publisher cannot take the patch and skip the payment.
 

@@ -43,7 +43,7 @@ class TestDeadline:
 
 class TestSilentPublisher:
     def accepted(self) -> Clocks:
-        return Clocks(IssueState.ACCEPTED, deadline=T0 + ESCROW_TERM, verdict_passed_at=T0)
+        return Clocks(IssueState.IN_REVIEW, deadline=T0 + ESCROW_TERM, verdict_passed_at=T0)
 
     def test_a_passing_verdict_waits_out_the_grace_period(self) -> None:
         assert due(self.accepted(), T0 + SILENT_PUBLISHER_GRACE) is None
@@ -53,7 +53,7 @@ class TestSilentPublisher:
         assert due(self.accepted(), moment) is TimedAction.RELEASE_AFTER_GRACE
 
     def test_only_a_passing_verdict_starts_the_grace_period(self) -> None:
-        clocks = Clocks(IssueState.ACCEPTED, deadline=T0, verdict_passed_at=None)
+        clocks = Clocks(IssueState.IN_REVIEW, deadline=T0, verdict_passed_at=None)
         assert due(clocks, T0 + ESCROW_TERM) is None
 
     def test_the_grace_is_capped_at_the_escrow_deadline(self) -> None:
@@ -61,7 +61,7 @@ class TestSilentPublisher:
         deadline. Uncapped it would release after `release` has started reverting, and
         the work the verdict passed would be refunded instead. See #33."""
         clocks = Clocks(
-            IssueState.ACCEPTED,
+            IssueState.IN_REVIEW,
             deadline=T0 + timedelta(days=4),
             verdict_passed_at=T0,
         )

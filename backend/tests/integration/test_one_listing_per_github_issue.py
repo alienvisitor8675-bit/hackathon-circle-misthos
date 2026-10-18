@@ -135,7 +135,7 @@ class TestOneOpenListing:
             ("ISS-1001", "acme/ledger-core", 412),  # FUNDED
             ("ISS-1003", "globex/parse-locale", 87),  # CLAIMED
             ("ISS-1002", "acme/ledger-core", 428),  # IN_REVIEW
-            ("ISS-1007", "northwind/httpx-retry", 231),  # REWORK
+            ("ISS-1007", "northwind/httpx-retry", 231),  # changes requested
         ],
     )
     def test_every_state_short_of_paid_or_refunded_holds_the_listing(

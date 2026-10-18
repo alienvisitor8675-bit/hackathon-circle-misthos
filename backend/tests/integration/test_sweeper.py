@@ -93,7 +93,7 @@ class TestSilentPublisher:
     def test_a_backdated_passing_verdict_releases_without_any_api_call(self) -> None:
         store.advance("ISS-1002")  # seeded IN_REVIEW, the verdict passes
         accepted = get("ISS-1002")
-        assert accepted.state is IssueState.ACCEPTED and accepted.review is not None
+        assert accepted.state is IssueState.IN_REVIEW and accepted.review is not None
 
         later = accepted.review.decided_at + SILENT_PUBLISHER_GRACE + timedelta(hours=1)
         sweep_once(store, now=later)
@@ -116,7 +116,7 @@ class TestSilentPublisher:
         store.save(rec)
 
         sweep_once(store, now=decided + SILENT_PUBLISHER_GRACE - A_MINUTE)
-        assert get("ISS-1002").state is IssueState.ACCEPTED
+        assert get("ISS-1002").state is IssueState.IN_REVIEW
 
         sweep_once(store, now=decided + SILENT_PUBLISHER_GRACE + A_MINUTE)
         assert get("ISS-1002").state is IssueState.PAID
@@ -132,7 +132,7 @@ class TestSilentPublisher:
         assert decided + SILENT_PUBLISHER_GRACE > rec.deadline
 
         sweep_once(store, now=rec.deadline - A_MINUTE)
-        assert get("ISS-1002").state is IssueState.ACCEPTED
+        assert get("ISS-1002").state is IssueState.IN_REVIEW
 
         sweep_once(store, now=rec.deadline + A_MINUTE)
         assert get("ISS-1002").state is IssueState.PAID
@@ -156,7 +156,7 @@ class TestSilentPublisher:
 
         assert report.failed == []
         held = get("ISS-1002")
-        assert held.state is IssueState.ACCEPTED and held.accepted_by == "grace"
+        assert held.state is IssueState.IN_REVIEW and held.accepted_by == "grace"
         assert held.payout_hold == PayoutGate.RELEASE_FAILED.value
         assert held.decisions[-1].action == "payout_held"
         assert "NotAttestor" in held.decisions[-1].outcome
@@ -201,7 +201,7 @@ class TestSweeping:
 
         assert "ISS-1003" not in report.applied
         after = get("ISS-1003")
-        assert after.state in {IssueState.IN_REVIEW, IssueState.ACCEPTED}
+        assert after.state is IssueState.IN_REVIEW
         assert "claim_expired" not in [d.action for d in after.decisions]
 
     def test_an_issue_someone_is_acting_on_is_skipped_until_the_next_pass(self) -> None:

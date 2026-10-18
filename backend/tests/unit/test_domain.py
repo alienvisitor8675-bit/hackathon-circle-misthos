@@ -84,7 +84,6 @@ class TestLifecycle:
             IssueState.FUNDED,
             IssueState.CLAIMED,
             IssueState.IN_REVIEW,
-            IssueState.ACCEPTED,
             IssueState.PAID,
         ):
             state = transition(state, nxt)
@@ -94,13 +93,16 @@ class TestLifecycle:
         with pytest.raises(IllegalTransition):
             transition(IssueState.PRICED, IssueState.FUNDED)
 
-    def test_cannot_accept_work_that_was_never_submitted(self) -> None:
-        with pytest.raises(IllegalTransition):
-            transition(IssueState.CLAIMED, IssueState.ACCEPTED)
+    def test_a_failed_review_returns_the_issue_to_its_claimant(self) -> None:
+        """Rework is not a state: the contributor keeps the claim while fixing it."""
+        assert can_transition(IssueState.IN_REVIEW, IssueState.CLAIMED)
 
-    def test_cannot_pay_before_acceptance(self) -> None:
+    def test_a_passing_verdict_keeps_the_issue_in_review_until_the_merge(self) -> None:
+        assert can_transition(IssueState.IN_REVIEW, IssueState.PAID)
+
+    def test_cannot_pay_before_submission(self) -> None:
         with pytest.raises(IllegalTransition):
-            transition(IssueState.IN_REVIEW, IssueState.PAID)
+            transition(IssueState.CLAIMED, IssueState.PAID)
 
     def test_expired_claim_returns_the_issue_to_the_pool(self) -> None:
         assert can_transition(IssueState.CLAIMED, IssueState.FUNDED)

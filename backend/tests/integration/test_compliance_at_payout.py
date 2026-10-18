@@ -58,7 +58,7 @@ def actions(rec: IssueRecord) -> list[str]:
 
 
 def run_to_merge(issue_id: str) -> IssueRecord:
-    """Advance a seeded REWORK or IN_REVIEW issue through its verdict to the merge."""
+    """Advance a seeded changes-requested or in-review issue to the merge."""
     for _ in range(4):
         rec = get(issue_id)
         if rec.accepted_by is not None or rec.state is IssueState.PAID:
@@ -69,7 +69,7 @@ def run_to_merge(issue_id: str) -> IssueRecord:
 
 class TestIdentityAtFirstPayout:
     def test_a_contributor_claims_and_submits_with_no_identity_step(self) -> None:
-        rework = get("ISS-1007")  # seeded REWORK, held by the unverified tom_e
+        rework = get("ISS-1007")  # seeded changes requested, held by the unverified tom_e
         assert rework.contributor_id == "CON-5"
         store.advance("ISS-1007")  # resubmits
         after = get("ISS-1007")
@@ -103,7 +103,7 @@ class TestIdentityAtFirstPayout:
         store.identity.hold("CON-5")  # type: ignore[attr-defined]
         held = run_to_merge("ISS-1007")
 
-        assert held.state is IssueState.ACCEPTED
+        assert held.state is IssueState.IN_REVIEW
         assert held.payout_hold == "await_identity"
         assert held.paid is None
         assert actions(held)[-1] == "payout_held"
@@ -135,7 +135,7 @@ class TestContinuousScreening:
 
         held = run_to_merge("ISS-1002")
 
-        assert held.state is IssueState.ACCEPTED
+        assert held.state is IssueState.IN_REVIEW
         assert held.payout_hold == "blocked_sanctions"
         assert held.paid is None
         assert held.decisions[-1].rule == "sanctions_screening"
@@ -149,7 +149,7 @@ class TestContinuousScreening:
         sweep_once(store, now=accepted.review.decided_at + SILENT_PUBLISHER_GRACE + LATER)
 
         after = get("ISS-1002")
-        assert after.state is IssueState.ACCEPTED
+        assert after.state is IssueState.IN_REVIEW
         assert after.accepted_by == "grace"
         assert after.payout_hold == "blocked_sanctions"
 
@@ -225,7 +225,7 @@ class TestContinuousScreening:
         assert "no payout is released to them while their wallet is listed" in line
 
         held = run_to_merge("ISS-1003")
-        assert held.state is IssueState.ACCEPTED
+        assert held.state is IssueState.IN_REVIEW
         assert held.payout_hold == "blocked_sanctions" and held.paid is None
 
     def test_a_listed_publisher_is_flagged_for_what_it_stops_and_nothing_more(self) -> None:
@@ -341,7 +341,7 @@ class TestStatements:
         even where the issue's mirrored state says otherwise."""
         year = self.paid_year("ISS-1004")
         mirrored = get("ISS-1004")
-        mirrored.state = IssueState.ACCEPTED  # the mirror disagrees with the ledger
+        mirrored.state = IssueState.IN_REVIEW  # the mirror disagrees with the ledger
         store.repo.save_issues(mirrored)
 
         statement = annual_statement(store, "CON-3", year)

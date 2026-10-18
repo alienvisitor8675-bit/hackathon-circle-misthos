@@ -190,7 +190,9 @@ class TestAReputation:
         assert body["signals"]["issues_held"] >= 1
 
     def test_counts_the_verdicts_on_work_the_contributor_holds(self, client):
-        rework = next(r for r in store.repo.list_issues() if r.state.value == "REWORK")
+        rework = next(
+            r for r in store.repo.list_issues() if r.review and r.review.verdict == "rework"
+        )
         body = client.get(f"{PAID}/reputation/{rework.contributor_id}", headers=EDGE).json()
         assert body["signals"]["verdicts"]["rework"] >= 1
         assert body["signals"]["rework_rounds"] >= 1

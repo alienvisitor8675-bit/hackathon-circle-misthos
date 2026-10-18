@@ -191,7 +191,7 @@ export default function Dashboard() {
             <tbody>
               {rows
                 .filter((r) =>
-                  ['AWAITING_APPROVAL', 'IN_REVIEW', 'REWORK'].includes(r.state),
+                  ['AWAITING_APPROVAL', 'CLAIMED', 'IN_REVIEW'].includes(r.state),
                 )
                 .slice(0, 6)
                 .map((r) => (

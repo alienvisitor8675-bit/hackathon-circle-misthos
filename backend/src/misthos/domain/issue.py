@@ -21,8 +21,6 @@ class IssueState(StrEnum):
     FUNDED = "FUNDED"
     CLAIMED = "CLAIMED"
     IN_REVIEW = "IN_REVIEW"
-    REWORK = "REWORK"
-    ACCEPTED = "ACCEPTED"
     PAID = "PAID"
     REJECTED = "REJECTED"
     REFUNDED = "REFUNDED"
@@ -35,30 +33,27 @@ TRANSITIONS: dict[IssueState, frozenset[IssueState]] = {
     IssueState.AWAITING_APPROVAL: frozenset({IssueState.DRAFT, IssueState.FUNDED}),
     IssueState.FUNDED: frozenset({IssueState.CLAIMED, IssueState.REFUNDED}),
     IssueState.CLAIMED: frozenset({IssueState.IN_REVIEW, IssueState.FUNDED}),
-    IssueState.IN_REVIEW: frozenset({IssueState.REWORK, IssueState.ACCEPTED, IssueState.REJECTED}),
-    IssueState.REWORK: frozenset({IssueState.IN_REVIEW}),
-    # ACCEPTED means the platform's verdict passed and the publisher has not merged
-    # yet. That is the grace window, not a resting state.
+    # The review verdict lives on the issue, not in the state: a failed review sends
+    # the issue back to CLAIMED, where the contributor still holds it and can push a
+    # new commit, and a passing one leaves it here until the publisher merges.
     # A publisher may decline a passing verdict, with a reason, once (#54); the work
-    # goes back for rework rather than the money back to them.
-    IssueState.ACCEPTED: frozenset({IssueState.PAID, IssueState.REWORK}),
+    # goes back to CLAIMED rather than the money back to them.
+    IssueState.IN_REVIEW: frozenset({IssueState.CLAIMED, IssueState.REJECTED, IssueState.PAID}),
     IssueState.PAID: frozenset(),
     # A rejection sends the issue back to the pool, or, when the contributor's
-    # dispute is upheld on a second review, on to acceptance (#39).
-    IssueState.REJECTED: frozenset({IssueState.FUNDED, IssueState.ACCEPTED}),
+    # dispute is upheld on a second review, back into review (#39).
+    IssueState.REJECTED: frozenset({IssueState.FUNDED, IssueState.IN_REVIEW}),
     IssueState.REFUNDED: frozenset(),
 }
 
-# States where money is committed and the issue is still live. ACCEPTED belongs
-# here: a passing verdict with an unmerged pull request is exactly that, for up to
-# the length of the silent-publisher grace period.
+# States where money is committed and the issue is still live. IN_REVIEW belongs
+# here whether a verdict has landed or not: the work is not accepted until the
+# publisher merges, so a passing verdict with an unmerged pull request is live too.
 OPEN_STATES = frozenset(
     {
         IssueState.FUNDED,
         IssueState.CLAIMED,
         IssueState.IN_REVIEW,
-        IssueState.REWORK,
-        IssueState.ACCEPTED,
     }
 )
 

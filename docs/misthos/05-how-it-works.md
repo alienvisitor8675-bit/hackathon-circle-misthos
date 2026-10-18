@@ -55,20 +55,19 @@ stateDiagram-v2
     Funded --> Claimed: contributor takes an exclusive time-boxed claim
     Claimed --> Funded: claim expires without a pull request
     Claimed --> InReview: contributor opens a pull request
-    InReview --> Rework: the verdict asks for changes
-    Rework --> InReview: contributor pushes an update
-    InReview --> Accepted: the verdict passes
+    InReview --> Claimed: the verdict asks for changes
+    Claimed --> InReview: contributor pushes an update
     InReview --> Rejected: the verdict rejects with reasons
     Rejected --> Funded: issue returns to the pool
-    Rejected --> Accepted: a contributor's dispute is upheld on a second review
-    Accepted --> Paid: publisher merges, or the grace period expires
-    Accepted --> Rework: publisher declines once, with a reason
+    Rejected --> InReview: a contributor's dispute is upheld on a second review
+    InReview --> Paid: publisher merges, or the grace period expires
+    InReview --> Claimed: publisher declines once, with a reason
     Funded --> Refunded: deadline passes with no accepted work
     Refunded --> [*]
     Paid --> [*]
 ```
 
-Two states carry most of the design weight. `AwaitingApproval` is the human checkpoint: it is where a person names the price and signs it, and where they can still move it, because no money has moved and nobody has been promised anything. `Accepted` is the window in which the publisher decides whether to merge, or to decline once with a reason, and it is the only other place a person reaches into the flow. Everything between them runs without one.
+Two states carry most of the design weight. `AwaitingApproval` is the human checkpoint: it is where a person names the price and signs it, and where they can still move it, because no money has moved and nobody has been promised anything. `InReview` is where the agent's verdict and the publisher's merge both land: a failed verdict sends the issue back to `Claimed`, a passing one leaves it in review until the merge, and a publisher can decline a passing verdict once, with a reason, which also sends it back. It is the only other place a person reaches into the flow. Everything between them runs without one.
 
 A refunded issue is not re-listed. Nobody claiming an issue at its price is information, and the person it belongs to is the publisher: they can publish the issue again at a number they choose. An agent raising the price on their behalf would be guessing at their budget.
 

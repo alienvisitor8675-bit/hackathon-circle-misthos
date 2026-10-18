@@ -24,7 +24,8 @@ module never writes state itself.
   GitHub signs the delivery, so the comment's author is who GitHub says it is.
 - `pull_request` opened, reopened or ready_for_review: `submit_pull_request`, which
   moves `CLAIMED` to `IN_REVIEW` for the claimant's pull request only.
-- `pull_request` synchronize: `submit_pull_request`, `REWORK` back to `IN_REVIEW`.
+- `pull_request` synchronize: `submit_pull_request`, `CLAIMED` back to `IN_REVIEW`
+  with the new commit.
 - `pull_request` closed and merged: `pull_request_closed`. Merge is acceptance, and
   the payout is released.
 - `pull_request` closed without a merge: logged. The claim and the deadline decide

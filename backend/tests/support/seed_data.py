@@ -277,7 +277,7 @@ _ISSUE_SPECS: list[dict] = [
         "number": 231,
         "title": "Support per-request timeouts that override the client default",
         "summary": "A single slow endpoint forces a global timeout increase for everyone.",
-        "state": "REWORK",
+        "state": "CLAIMED",
         "labels": ["feature", "api"],
         "compliance_driven": False,
         "criteria": [
@@ -286,7 +286,7 @@ _ISSUE_SPECS: list[dict] = [
             "Backwards compatibility is preserved for callers that pass nothing.",
         ],
         "publisher_id": "PUB-2",
-        "age_days": 11,
+        "age_days": 3,
         "contributor_id": "CON-5",
         "pr": {
             "pr_number": 640,

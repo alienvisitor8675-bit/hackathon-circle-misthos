@@ -454,7 +454,7 @@ html:has(.landing) { scroll-behavior: smooth; }
 .landing .issue-state { display: inline-flex; align-items: center; min-height: 22px; padding: 3px 8px; border: 1px solid #494138; border-radius: 999px; color: #d4c8b8; font-size: 8px; letter-spacing: .07em; text-transform: uppercase; white-space: nowrap; }
 .landing .issue-state-approval { border-color: #80611a; color: #d9ac30; }
 .landing .issue-state-funded, .landing .issue-state-claimed { border-color: #355740; color: #9fc4a0; }
-.landing .issue-state-review, .landing .issue-state-rework { border-color: #594c76; color: #b7a5dd; }
+.landing .issue-state-review { border-color: #594c76; color: #b7a5dd; }
 .landing .issue-state-merge { border-color: #355362; color: #9bc9d8; }
 .landing .issue-state-settled { border-color: #42624e; color: #a9d0ac; }
 .landing .issue-state-refunded { border-color: #624444; color: #d8a4a4; }

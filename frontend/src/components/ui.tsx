@@ -1,24 +1,11 @@
 /** Shared presentational pieces. Small enough not to need a component library. */
 
 import { checksChip } from '../lib/client'
-
-const STATE_TONE: Record<string, string> = {
-  DRAFT: '',
-  PRICED: 'info',
-  AWAITING_APPROVAL: 'warn',
-  FUNDED: 'accent',
-  CLAIMED: 'info',
-  IN_REVIEW: 'accent',
-  REWORK: 'warn',
-  ACCEPTED: 'ok',
-  PAID: 'ok',
-  REJECTED: 'bad',
-  REFUNDED: '',
-}
+import { STATE_TONES, stateLabel } from '../lib/state'
 
 export function StateBadge({ state }: { state: string }) {
-  const tone = STATE_TONE[state] ?? ''
-  return <span className={`chip ${tone}`}>{state.replace(/_/g, ' ')}</span>
+  const tone = STATE_TONES[state] ?? ''
+  return <span className={`chip ${tone}`}>{stateLabel(state)}</span>
 }
 
 export function ChecksChip({ passed }: { passed: boolean | null }) {
@@ -91,11 +78,10 @@ const MAIN_LINE = [
   'FUNDED',
   'CLAIMED',
   'IN_REVIEW',
-  'ACCEPTED',
   'PAID',
 ]
 
-const BRANCHES = ['REWORK', 'REJECTED', 'REFUNDED']
+const BRANCHES = ['REJECTED', 'REFUNDED']
 
 export function Stepper({ state }: { state: string }) {
   const inBranch = BRANCHES.includes(state)
@@ -111,7 +97,7 @@ export function Stepper({ state }: { state: string }) {
             {i > 0 && <span className="step-line" />}
             <span className={`step-node ${done ? 'done' : ''} ${current ? 'current' : ''}`}>
               <i className="marker" />
-              {step.replace(/_/g, ' ')}
+              {stateLabel(step)}
             </span>
           </span>
         )
@@ -121,7 +107,7 @@ export function Stepper({ state }: { state: string }) {
           <span className="step-line" />
           <span className="step-node current">
             <i className="marker" />
-            {state.replace(/_/g, ' ')}
+            {stateLabel(state)}
           </span>
         </span>
       )}
